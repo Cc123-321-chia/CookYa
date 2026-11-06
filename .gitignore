@@ -5,7 +5,6 @@
 .packages
 build/
 # If you're building an application, you may want to check-in your pubspec.lock
-pubspec.lock
 
 # Directory created by dartdoc
 # If you don't generate documentation locally you can remove this line.
@@ -25,3 +24,43 @@ doc/api/
 
 .flutter-plugins
 .flutter-plugins-dependencies
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.log
+
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Django
+db.sqlite3
+staticfiles/
+
+# User uploaded media
+media/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Flutter / Android generated files
+**/.gradle/
+**/local.properties
+
+# iOS / macOS generated files
+**/Pods/
+**/.symlinks/
+**/ephemeral/
+**/xcuserdata/
+**/Generated.xcconfig
+**/flutter_export_environment.sh
+
+# IDE
+*.iml
+**/.idea/
