@@ -432,7 +432,6 @@ class _BookingScreenState extends State<BookingScreen> {
                   padding: const EdgeInsets.all(12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,

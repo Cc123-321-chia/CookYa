@@ -58,6 +58,8 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
   final _tagCtrl = TextEditingController();
   final _dishCtrl = TextEditingController();
   final _certCtrl = TextEditingController();
+  bool _isAddingCustomTag = false;
+  final TextEditingController _customTagCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -112,6 +114,7 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
     _tagCtrl.dispose();
     _dishCtrl.dispose();
     _certCtrl.dispose();
+    _customTagCtrl.dispose();
     super.dispose();
   }
 
@@ -431,10 +434,18 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
                                       child: DropdownButtonHideUnderline(
                                         child: DropdownButton<String>(
                                           value: _selectedCurrency,
+                                          isDense: true,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 13,
+                                            color: const Color(0xFF6B4C2A),
+                                          ),
                                           items: _currencies.map((c) {
                                             return DropdownMenuItem(
                                               value: c,
-                                              child: Text(c),
+                                              child: Text(
+                                                c,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             );
                                           }).toList(),
                                           onChanged: (v) => setState(
@@ -504,6 +515,7 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
                                 const SizedBox(height: 4),
                                 DropdownButtonFormField<String>(
                                   value: _classType,
+                                  isExpanded: true,
                                   decoration: InputDecoration(
                                     filled: true,
                                     fillColor: Colors.white,
@@ -549,57 +561,189 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: _availableTags.map((tag) {
-                          final selected = _tags.contains(tag);
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                if (selected) {
-                                  _tags.remove(tag);
-                                } else {
-                                  _tags.add(tag);
-                                }
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: selected
-                                    ? const Color(0xFFFFD966)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
+                        children: [
+                          ..._availableTags.map((tag) {
+                            final selected = _tags.contains(tag);
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (selected) {
+                                    _tags.remove(tag);
+                                  } else {
+                                    _tags.add(tag);
+                                  }
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
                                   color: selected
                                       ? const Color(0xFFFFD966)
-                                      : const Color(0xFFFFB347),
-                                  width: 1.5,
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: selected
+                                        ? const Color(0xFFFFD966)
+                                        : const Color(0xFFFFB347),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (selected) ...[
+                                      const Icon(Icons.check,
+                                          size: 14, color: Color(0xFF6B4C2A)),
+                                      const SizedBox(width: 4),
+                                    ],
+                                    Text(
+                                      tag,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: const Color(0xFF6B4C2A),
+                                        fontWeight: selected
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (selected) ...[
-                                    const Icon(Icons.check,
-                                        size: 14, color: Color(0xFF6B4C2A)),
+                            );
+                          }),
+                          if (!_isAddingCustomTag)
+                            GestureDetector(
+                              onTap: () =>
+                                  setState(() => _isAddingCustomTag = true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color: const Color(0xFFFFB347),
+                                      width: 1.5),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.add,
+                                        size: 16, color: Color(0xFFFFB347)),
                                     const SizedBox(width: 4),
-                                  ],
-                                  Text(
-                                    tag,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      color: const Color(0xFF6B4C2A),
-                                      fontWeight: selected
-                                          ? FontWeight.w600
-                                          : FontWeight.normal,
+                                    Text(
+                                      'Other',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: const Color(0xFFFFB347),
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
-                          );
-                        }).toList(),
+                        ],
                       ),
+                      if (_isAddingCustomTag)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _customTagCtrl,
+                                  autofocus: true,
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter custom tag...',
+                                    hintStyle: TextStyle(
+                                        color: Colors.grey.shade400,
+                                        fontSize: 13),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                            horizontal: 16, vertical: 12),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                onPressed: () {
+                                  final v = _customTagCtrl.text.trim();
+                                  if (v.isNotEmpty && !_tags.contains(v)) {
+                                    setState(() {
+                                      _tags.add(v);
+                                      _customTagCtrl.clear();
+                                      _isAddingCustomTag = false;
+                                    });
+                                  }
+                                },
+                                icon: const Icon(Icons.check_circle,
+                                    color: Color(0xFFFFB347)),
+                              ),
+                              IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _isAddingCustomTag = false;
+                                    _customTagCtrl.clear();
+                                  });
+                                },
+                                icon: const Icon(Icons.cancel,
+                                    color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (_tags
+                          .where((t) => !_availableTags.contains(t))
+                          .isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _tags
+                                .where((t) => !_availableTags.contains(t))
+                                .map((tag) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFD966),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color: const Color(0xFFFFB347),
+                                      width: 1.5),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      tag,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: const Color(0xFF6B4C2A),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: () =>
+                                          setState(() => _tags.remove(tag)),
+                                      child: const Icon(Icons.close,
+                                          size: 16,
+                                          color: Color(0xFFFFB347)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
 
                       const SizedBox(height: 24),
                       _listSection('Dishes', _dishes, _dishCtrl,
