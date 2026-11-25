@@ -28,7 +28,8 @@ class ApiService {
       return _savedBaseUrl!;
     }
     if (kIsWeb) return 'http://localhost:8000/api';
-    return 'http://192.168.1.100:8000/api';
+    //change ip address for android
+    return 'http://192.168.100.166:8000/api';
   }
 
   static String resolveImageUrl(String? url) {
@@ -2373,7 +2374,29 @@ class ApiService {
         headers: _getHeaders(),
         body: jsonEncode({'sfx': sfx}),
       );
-      return {'success': response.statusCode == 200};
+
+      // Preserve the server's response body so the caller can see WHY
+      // it failed (e.g. "Room not active", 401, 500).
+      String rawBody = response.body;
+      Map<String, dynamic>? parsed;
+      try {
+        parsed = jsonDecode(rawBody) as Map<String, dynamic>;
+      } catch (_) {
+        parsed = null;
+      }
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          if (parsed != null) ...parsed,
+        };
+      }
+
+      return {
+        'success': false,
+        'status': response.statusCode,
+        'error': parsed?['error'] ?? rawBody,
+      };
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }

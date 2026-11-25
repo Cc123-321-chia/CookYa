@@ -134,7 +134,41 @@ def get_user_profile(request, user_id):
     try:
         user = User.objects.get(user_id=user_id)
         serializer = UserSerializer(user, context={'request': request})
-        return Response({'success': True, 'data': serializer.data})
+        data = serializer.data
+
+        # Override the (possibly stale) like counters with real M2M
+        # counts, so OTHER users also see accurate numbers.
+        #
+        # Per product decision: profile "Likes" = likes received on
+        # recipes + ingredient guidance posts only. Dish (homework)
+        # likes are intentionally excluded.
+        #
+        # This does NOT touch points / level / signals / counter
+        # fields on the User model — it only adjusts the response.
+        from ingredients.models import IngredientPost
+        from recipes.models import Recipe
+
+        ingredient_ids = list(
+            IngredientPost.objects.filter(author=user).values_list('id', flat=True)
+        )
+        recipe_ids = list(
+            Recipe.objects.filter(author=user).values_list('id', flat=True)
+        )
+
+        recipe_likes = sum(
+            Recipe.objects.get(id=i).likes.count() for i in recipe_ids
+        )
+        ingredient_likes = sum(
+            IngredientPost.objects.get(id=i).likes.count() for i in ingredient_ids
+        )
+
+        data['recipe_likes_received'] = recipe_likes
+        data['ingredient_likes_received'] = ingredient_likes
+        # Keep total_likes_received consistent with the profile "Likes"
+        # stat (recipes + ingredient guidance only, dishes excluded).
+        data['total_likes_received'] = recipe_likes + ingredient_likes
+
+        return Response({'success': True, 'data': data})
     except User.DoesNotExist:
         return Response({'success': False, 'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -981,28 +1015,50 @@ def end_call_room(request, room_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def send_sfx(request, room_id):
-    """一方触发音效 → 通过 WebSocket 推给对方，让对方也播"""
+    """One party triggers a sound effect → it is sent to the other party via WebSocket, causing them to play it as well."""
+    import logging
+    logger = logging.getLogger(__name__)
+
     try:
         room = CallRoom.objects.get(room_id=room_id)
     except CallRoom.DoesNotExist:
+        logger.warning('send_sfx: room %s not found', room_id)
         return Response({'success': False, 'error': 'Room not found'}, status=404)
+
     if not room.is_active:
+        logger.warning('send_sfx: room %s is not active', room_id)
         return Response({'success': False, 'error': 'Room not active'}, status=400)
 
     sfx = request.data.get('sfx', '').strip()
     if sfx not in ('cheer', 'applause', 'cook', 'confetti'):
+        logger.warning('send_sfx: invalid sfx %r', sfx)
         return Response({'success': False, 'error': 'Invalid sfx'}, status=400)
 
-    # 推送给自己之外的另一个 user
-    other_user = room.receiver_id if request.user.user_id == room.caller_id else room.caller_id
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f'call_{other_user}',
-        {
-            'type': 'call_sfx',
-            'sfx': sfx,
-        }
+    other_user = (
+        room.receiver_id
+        if request.user.user_id == room.caller_id
+        else room.caller_id
     )
+    group = f'call_{other_user}'
+
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        logger.error('send_sfx: no channel layer')
+        return Response({'success': False, 'error': 'No channel layer'}, status=500)
+
+    try:
+        async_to_sync(channel_layer.group_send)(
+            group,
+            {'type': 'call_sfx', 'sfx': sfx},
+        )
+    except Exception as e:
+        logger.exception('send_sfx: group_send failed')
+        return Response(
+            {'success': False, 'error': f'group_send failed: {e}'},
+            status=500,
+        )
+
+    logger.info('send_sfx: pushed sfx=%s to group=%s', sfx, group)
     return Response({'success': True})
 
 @api_view(['GET'])

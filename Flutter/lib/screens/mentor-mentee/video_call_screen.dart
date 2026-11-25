@@ -73,6 +73,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   // ========== SFX WS ==========
   WebSocketChannel? _wsChannel;
   StreamSubscription? _wsSubscription;
+  Timer? _sfxReconnectTimer;
 
   // ========== Recipes ==========
   List<Map<String, dynamic>> _availableRecipes = [];
@@ -264,6 +265,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       await ApiService.endCallRoom(widget.roomId!, _timerSeconds);
     }
     _timerTick?.cancel();
+    _sfxReconnectTimer?.cancel();
     _call?.close();
     _streamSubscription?.cancel();
     _callSubscription?.cancel();
@@ -283,31 +285,86 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   }
 
   // ==================== SFX ====================
-  void _startSfxWebSocket() {
-    if (widget.roomId == null) return;
-    final myUserId = ApiService.currentUserId;
-    if (myUserId == null) return;
+  /// Opens the WebSocket that receives SFX events pushed by the peer.
+  /// Reconnects automatically if the connection drops.
+  void _startSfxWebSocket() async {
+    if (_isDisposed) return;
+    if (widget.roomId == null) {
+      debugPrint('🔌 SFX WS skipped: roomId is null');
+      return;
+    }
+
+    var myUserId = ApiService.currentUserId;
+    if (myUserId == null) {
+      debugPrint('🔌 SFX WS: currentUserId is null, fetching profile...');
+      final profile = await ApiService.getProfile();
+      if (profile['success'] == true) {
+        myUserId = ApiService.currentUserId;
+      }
+    }
+    if (myUserId == null) {
+      debugPrint('🔌 SFX WS skipped: currentUserId still null');
+      _scheduleSfxReconnect();
+      return;
+    }
+
+    debugPrint('🔌 SFX WS: currentUserId=$myUserId, roomId=${widget.roomId}');
 
     final wsUrl = ApiService.baseUrl
         .replaceFirst('http://', 'ws://')
         .replaceFirst('https://', 'wss://')
         .replaceFirst('/api', '');
     final uri = Uri.parse('$wsUrl/ws/call/$myUserId/');
+    debugPrint('🔌 SFX WS: connecting to $uri');
 
     try {
       _wsChannel = WebSocketChannel.connect(uri);
-      _wsSubscription = _wsChannel!.stream.listen((event) {
-        try {
-          final data = jsonDecode(event);
-          if (data['type'] == 'call_sfx') {
-            final sfx = data['sfx']?.toString();
-            if (sfx != null) _playSfxLocal(sfx);
-          }
-        } catch (_) {}
+      _wsChannel!.ready.then((_) {
+        debugPrint('✅ SFX WS ready');
+      }).catchError((e) {
+        debugPrint('❌ SFX WS connect failed: $e');
+        _scheduleSfxReconnect();
       });
+      _wsSubscription = _wsChannel!.stream.listen(
+        (event) {
+          debugPrint('📨 SFX WS recv: $event');
+          try {
+            final data = jsonDecode(event);
+            if (data['type'] == 'call_sfx') {
+              final sfx = data['sfx']?.toString();
+              debugPrint('🎵 SFX received: $sfx');
+              if (sfx != null) _playSfxLocal(sfx);
+            }
+          } catch (e) {
+            debugPrint('❌ SFX parse error: $e');
+          }
+        },
+        onError: (e) {
+          debugPrint('❌ SFX WS stream error: $e');
+          _scheduleSfxReconnect();
+        },
+        onDone: () {
+          debugPrint('🔚 SFX WS closed');
+          _scheduleSfxReconnect();
+        },
+      );
     } catch (e) {
-      debugPrint('ws sfx failed: $e');
+      debugPrint('❌ SFX WS setup failed: $e');
+      _scheduleSfxReconnect();
     }
+  }
+
+  /// Retries the SFX WebSocket after a short delay when the
+  /// connection drops or fails to open.
+  void _scheduleSfxReconnect() {
+    if (_isDisposed) return;
+    if (widget.roomId == null) return;
+    _sfxReconnectTimer?.cancel();
+    _sfxReconnectTimer = Timer(const Duration(seconds: 2), () {
+      if (_isDisposed) return;
+      debugPrint('🔁 SFX WS reconnecting...');
+      _startSfxWebSocket();
+    });
   }
 
   Future<void> _playSfxLocal(String name) async {
@@ -320,9 +377,30 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   }
 
   Future<void> _triggerSfx(String name) async {
+    debugPrint('🎵 _triggerSfx($name)');
     await _playSfxLocal(name);
-    if (widget.roomId != null) {
-      await ApiService.sendSfx(widget.roomId!, name);
+    if (widget.roomId == null) {
+      debugPrint('🎵 roomId is null, not sending to server');
+      return;
+    }
+
+    final res = await ApiService.sendSfx(widget.roomId!, name);
+    debugPrint('🎵 sendSfx result: $res');
+
+    if (res['success'] != true) {
+      if (!mounted) return;
+      final status = res['status']?.toString() ?? '';
+      final error = res['error']?.toString() ?? 'unknown';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not send sound effect'
+            '${status.isNotEmpty ? ' ($status)' : ''}: $error',
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -573,6 +651,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     _timerTick?.cancel();
     _peerIdPollTimer?.cancel();
     _roomStatusPollTimer?.cancel();
+    _sfxReconnectTimer?.cancel();
     _streamSubscription?.cancel();
     _callSubscription?.cancel();
     _wsSubscription?.cancel();
@@ -723,7 +802,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
             ),
           ),
 
-          // 控制按钮
+          // Control buttons
           Positioned(
             left: 16,
             bottom: _showTutorial ? 120 : 40,
@@ -925,7 +1004,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
               ),
             ),
 
-          // Tutorial panel（拆分到 CallRecipePanel）
+          // Tutorial panel
           if (_showTutorial && _selectedRecipe != null)
             Positioned(
               bottom: 0,
