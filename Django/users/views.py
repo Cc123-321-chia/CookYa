@@ -1272,3 +1272,43 @@ def clear_chat_history(request, other_user_id):
         'success': True,
         'message': 'Chat history cleared for you',
     })
+
+
+# ==================== Real "likes received" (read-only) ====================
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_real_likes_received(request):
+    """
+    Returns the REAL number of likes this user's recipes and
+    ingredient guidance posts have received, computed directly
+    from the M2M like tables. Used by the Profile screen so the
+    "Likes" stat is independent of the (possibly stale) counter
+    fields on the User model.
+    """
+    from ingredients.models import IngredientPost
+    from recipes.models import Recipe
+
+    user = request.user
+
+    ingredient_ids = list(
+        IngredientPost.objects.filter(author=user).values_list('id', flat=True)
+    )
+    recipe_ids = list(
+        Recipe.objects.filter(author=user).values_list('id', flat=True)
+    )
+
+    ingredient_likes = sum(
+        IngredientPost.objects.get(id=i).likes.count() for i in ingredient_ids
+    )
+    recipe_likes = sum(
+        Recipe.objects.get(id=i).likes.count() for i in recipe_ids
+    )
+
+    return Response({
+        'success': True,
+        'data': {
+            'recipe_likes_received': recipe_likes,
+            'ingredient_likes_received': ingredient_likes,
+            'total': recipe_likes + ingredient_likes,
+        }
+    })

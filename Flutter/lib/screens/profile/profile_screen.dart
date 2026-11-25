@@ -145,7 +145,13 @@ class _ProfileScreenState extends State<ProfileScreen>
             nextLevelPoints: _getNextLevelPoints(userData['level'] ?? 1),
             followers: userData['followers_count'] ?? 0,
             following: userData['following_count'] ?? 0,
+            // Keep total_likes_received for backward compatibility,
+            // but the UI now uses the real-likes endpoint below.
             totalLikes: userData['total_likes_received'] ?? 0,
+            // Placeholder values; overwritten by the real-likes call.
+            recipeLikesReceived: userData['recipe_likes_received'] ?? 0,
+            ingredientLikesReceived:
+                userData['ingredient_likes_received'] ?? 0,
             isMentor: userData['is_mentor'] == true,
             isExpert: userData['is_expert'] == true,
             isOfficial: userData['is_official'] == true,
@@ -153,6 +159,12 @@ class _ProfileScreenState extends State<ProfileScreen>
           );
           _isLoading = false;
         });
+
+        // Independently fetch the REAL likes received on recipes +
+        // ingredient guidance posts (computed from M2M tables on the
+        // backend). This overrides the possibly-stale counters above
+        // without touching any points / level logic.
+        await _fetchRealLikes(token);
 
         _loadContentForSection(_selectedSection);
       } else if (response.statusCode == 401) {
@@ -171,6 +183,48 @@ class _ProfileScreenState extends State<ProfileScreen>
         _errorMessage = 'Connection error: $e';
         _isLoading = false;
       });
+    }
+  }
+
+  /// Fetch the real "likes received" count from the backend and update
+  /// the current user model. Failures are silent so the profile still
+  /// loads if this secondary call fails.
+  Future<void> _fetchRealLikes(String token) async {
+    try {
+      final resp = await http.get(
+        Uri.parse('${ApiService.baseUrl}/users/profile/real-likes/'),
+        headers: {'Authorization': 'Token $token'},
+      );
+      if (resp.statusCode != 200) return;
+      final data = jsonDecode(resp.body)['data'];
+      if (data == null || _currentUser == null) return;
+
+      final recipeLikes = data['recipe_likes_received'] ?? 0;
+      final ingredientLikes = data['ingredient_likes_received'] ?? 0;
+
+      setState(() {
+        _currentUser = UserModel(
+          id: _currentUser!.id,
+          userId: _currentUser!.userId,
+          name: _currentUser!.name,
+          avatarUrl: _currentUser!.avatarUrl,
+          bio: _currentUser!.bio,
+          level: _currentUser!.level,
+          currentPoints: _currentUser!.currentPoints,
+          nextLevelPoints: _currentUser!.nextLevelPoints,
+          followers: _currentUser!.followers,
+          following: _currentUser!.following,
+          totalLikes: _currentUser!.totalLikes,
+          recipeLikesReceived: recipeLikes,
+          ingredientLikesReceived: ingredientLikes,
+          isMentor: _currentUser!.isMentor,
+          isExpert: _currentUser!.isExpert,
+          isOfficial: _currentUser!.isOfficial,
+          isCulinaryInstructor: _currentUser!.isCulinaryInstructor,
+        );
+      });
+    } catch (e) {
+      debugPrint('Error loading real likes: $e');
     }
   }
 
@@ -301,6 +355,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         followers: _currentUser!.followers,
         following: _currentUser!.following,
         totalLikes: _currentUser!.totalLikes,
+        // Preserve like counters when the profile is edited,
+        // otherwise the "Likes" stat would reset to 0.
+        recipeLikesReceived: _currentUser!.recipeLikesReceived,
+        ingredientLikesReceived: _currentUser!.ingredientLikesReceived,
         isMentor: _currentUser!.isMentor,
         isExpert: _currentUser!.isExpert,
         isOfficial: _currentUser!.isOfficial,
@@ -669,6 +727,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildStatsRow() {
+    // "Likes" now reflects only likes received on recipes and
+    // ingredient guidance posts (dish likes are excluded).
+    final likesCount = _currentUser!.recipeLikesReceived +
+        _currentUser!.ingredientLikesReceived;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -678,8 +741,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         StatColumn(
             number: _currentUser!.following.toString(), label: 'Following'),
         const SizedBox(width: 40),
-        StatColumn(
-            number: _currentUser!.totalLikes.toString(), label: 'Likes'),
+        StatColumn(number: likesCount.toString(), label: 'Likes'),
       ],
     );
   }

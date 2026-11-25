@@ -12,6 +12,7 @@ urlpatterns = [
     # ==================== Profile ====================
     path('profile/', views.get_profile, name='profile'),
     path('profile/update/', views.update_profile, name='update_profile'),
+    path('profile/real-likes/', views.get_real_likes_received, name='real-likes'),
     path('profile/<str:user_id>/', views.get_user_profile, name='user_profile'),
 
     # ==================== Password ====================
