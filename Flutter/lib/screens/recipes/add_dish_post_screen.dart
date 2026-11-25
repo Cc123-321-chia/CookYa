@@ -35,6 +35,7 @@ class AddDishPostScreen extends StatefulWidget {
 class _AddDishPostScreenState extends State<AddDishPostScreen> {
   final _formKey = GlobalKey<FormState>();
   final _commentController = TextEditingController();
+  final _commentFocusNode = FocusNode();
   final ImagePicker _picker = ImagePicker();
 
   String _comment = '';
@@ -78,11 +79,13 @@ class _AddDishPostScreenState extends State<AddDishPostScreen> {
   @override
   void dispose() {
     _commentController.dispose();
+    _commentFocusNode.dispose();
     super.dispose();
   }
 
-  // ==================== 选图 ====================
+  // ==================== Pick / remove photo ====================
   Future<void> _pickPhotos() async {
+    FocusScope.of(context).unfocus();   // close keyboard before picker
     if (_photos.length >= 1) {
       _showSnackBar('Only one photo allowed');
       return;
@@ -98,8 +101,12 @@ class _AddDishPostScreenState extends State<AddDishPostScreen> {
     }
   }
 
-  void _deletePhoto(int index) {
+  void _deleteNewPhoto(int index) {
     setState(() => _photos.removeAt(index));
+  }
+
+  void _removeExistingPhoto() {
+    setState(() => _existingImageUrl = null);
   }
 
   void _showPhotoFullscreen(int startIndex) {
@@ -142,6 +149,9 @@ class _AddDishPostScreenState extends State<AddDishPostScreen> {
   }
 
   Future<void> _submitPost() async {
+    // Close the keyboard as soon as the user taps Save/Update.
+    FocusScope.of(context).unfocus();
+
     if (!_formKey.currentState!.validate()) return;
     if (_comment.isEmpty) {
       _showSnackBar('Please write a comment', isError: true);
@@ -155,7 +165,6 @@ class _AddDishPostScreenState extends State<AddDishPostScreen> {
 
     setState(() => _isSubmitting = true);
 
-    // 转 base64
     String? imageBase64;
     if (_photos.isNotEmpty) {
       final bytes = await _photos.first.readAsBytes();
@@ -194,79 +203,96 @@ class _AddDishPostScreenState extends State<AddDishPostScreen> {
   // ==================== Build ====================
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF9E6),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          widget.isEditing ? 'Edit Dish' : 'Share Your Dish',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
+    // Tap anywhere outside the text field to dismiss the keyboard.
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.translucent,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFF9E6),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          title: Text(
+            widget.isEditing ? 'Edit Dish' : 'Share Your Dish',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 18,
+              color: const Color(0xFF6B4C2A),
+            ),
+          ),
+          centerTitle: true,
+          leading: IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close),
             color: const Color(0xFF6B4C2A),
           ),
         ),
-        centerTitle: true,
-        leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.close),
-          color: const Color(0xFF6B4C2A),
-        ),
-      ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF5E6),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFFFFD966).withValues(alpha: 0.5),
+        body: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            // Scroll away to dismiss the keyboard.
+            keyboardDismissBehavior:
+                ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF5E6),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFFFD966).withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Recipe',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: const Color(0xFFC9A96E),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.recipeTitle,
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF6B4C2A),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Recipe',
-                        style: GoogleFonts.poppins(
-                            fontSize: 12, color: const Color(0xFFC9A96E))),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.recipeTitle,
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF6B4C2A),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              _buildMediaSection(),
-              const SizedBox(height: 24),
-              _buildRatingSection(),
-              const SizedBox(height: 24),
-              _buildCommentSection(),
-              const SizedBox(height: 32),
-              _buildButtonsSection(),
-              const SizedBox(height: 32),
-            ],
+                _buildMediaSection(),
+                const SizedBox(height: 24),
+                _buildRatingSection(),
+                const SizedBox(height: 24),
+                _buildCommentSection(),
+                const SizedBox(height: 32),
+                _buildButtonsSection(),
+                const SizedBox(height: 32),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
+  // ==================== Media section ====================
   Widget _buildMediaSection() {
+    final hasExisting =
+        _existingImageUrl != null && _existingImageUrl!.isNotEmpty;
+    final hasNewPhoto = _photos.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -280,33 +306,87 @@ class _AddDishPostScreenState extends State<AddDishPostScreen> {
         ),
         const SizedBox(height: 8),
         SizedBox(
-          height: 120,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              if (_photos.isEmpty && _existingImageUrl != null && _existingImageUrl!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      _existingImageUrl!,
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-              ..._photos.asMap().entries.map((e) => Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: _buildPhotoItem(e.key),
-                  )),
-              if (_photos.isEmpty && (_existingImageUrl == null || _existingImageUrl!.isEmpty))
-                _buildAddPhotoButton(),
-            ],
-          ),
+          height: 100,
+          child: hasNewPhoto
+              ? _buildNewPhotoTile(_photos.first)
+              : hasExisting
+                  ? _buildExistingPhotoTile()
+                  : _buildAddPhotoButton(),
         ),
       ],
+    );
+  }
+
+  Widget _buildExistingPhotoTile() {
+    return SizedBox(
+      width: 100,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              _existingImageUrl!,
+              width: 100,
+              height: 100,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned(
+            top: -6,
+            right: -6,
+            child: GestureDetector(
+              onTap: _removeExistingPhoto,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                  color: Colors.black87,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close, size: 16, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNewPhotoTile(File file) {
+    return SizedBox(
+      width: 100,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          GestureDetector(
+            onTap: () => _showPhotoFullscreen(0),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.file(
+                file,
+                width: 100,
+                height: 100,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          Positioned(
+            top: -6,
+            right: -6,
+            child: GestureDetector(
+              onTap: () => _deleteNewPhoto(0),
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                  color: Colors.black87,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close, size: 16, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -326,50 +406,17 @@ class _AddDishPostScreenState extends State<AddDishPostScreen> {
           children: [
             Icon(Icons.add, size: 40, color: Color(0xFFFFB347)),
             SizedBox(height: 4),
-            Text('Add Photo',
-                style: TextStyle(fontSize: 12, color: Color(0xFFC9A96E))),
+            Text(
+              'Add Photo',
+              style: TextStyle(fontSize: 12, color: Color(0xFFC9A96E)),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPhotoItem(int index) {
-    return Stack(
-      children: [
-        GestureDetector(
-          onTap: () => _showPhotoFullscreen(index),
-          child: Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              image: DecorationImage(
-                image: FileImage(_photos[index]),
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          top: 4,
-          right: 4,
-          child: GestureDetector(
-            onTap: () => _deletePhoto(index),
-            child: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: const BoxDecoration(
-                color: Colors.black54,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.close, size: 16, color: Colors.white),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
+  // ==================== Rating section ====================
   Widget _buildRatingSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -389,7 +436,10 @@ class _AddDishPostScreenState extends State<AddDishPostScreen> {
             final isSelected = _rating == r['value'];
             final color = r['color'] as Color;
             return GestureDetector(
-              onTap: () => setState(() => _rating = r['value'] as String),
+              onTap: () {
+                FocusScope.of(context).unfocus();
+                setState(() => _rating = r['value'] as String);
+              },
               child: Column(
                 children: [
                   Container(
@@ -428,6 +478,7 @@ class _AddDishPostScreenState extends State<AddDishPostScreen> {
     );
   }
 
+  // ==================== Comment section ====================
   Widget _buildCommentSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -443,8 +494,14 @@ class _AddDishPostScreenState extends State<AddDishPostScreen> {
         const SizedBox(height: 8),
         TextFormField(
           controller: _commentController,
+          focusNode: _commentFocusNode,
           onChanged: (v) => _comment = v,
           maxLines: 5,
+          // When the user taps "done" on the keyboard, drop the keyboard.
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) {
+            FocusScope.of(context).unfocus();
+          },
           decoration: InputDecoration(
             hintText: 'Share your experience with this dish...',
             hintStyle: TextStyle(color: Colors.grey.shade400),
@@ -472,6 +529,7 @@ class _AddDishPostScreenState extends State<AddDishPostScreen> {
     );
   }
 
+  // ==================== Buttons ====================
   Widget _buildButtonsSection() {
     return Row(
       children: [
@@ -511,7 +569,9 @@ class _AddDishPostScreenState extends State<AddDishPostScreen> {
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Color(0xFF6B4C2A)),
+                      strokeWidth: 2,
+                      color: Color(0xFF6B4C2A),
+                    ),
                   )
                 : Text(
                     widget.isEditing ? 'Update' : 'Share',

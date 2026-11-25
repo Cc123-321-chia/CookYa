@@ -1,10 +1,10 @@
 # recipes/serializers.py
 from rest_framework import serializers
 from .models import (
-    Recipe, Tag, CookingTool, Ingredient,
-    Step, Comment, Homework, CarouselItem
+    Recipe, Tag, CookingTool, Ingredient, 
+    Step, Comment, Homework, CarouselItem 
 )
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model 
 
 User = get_user_model()
 
@@ -63,16 +63,16 @@ class CommentSerializer(serializers.ModelSerializer):
     user_avatar = serializers.SerializerMethodField()
     likes = serializers.SerializerMethodField()
     photo_urls = serializers.JSONField(required=False, default=list)
-
+    
     class Meta:
         model = Comment
         fields = ['id', 'user', 'user_id', 'user_name', 'user_avatar', 'text', 'photo_urls', 'created_at', 'likes']
         read_only_fields = ['id', 'user', 'created_at']
-
+    
     def get_user_avatar(self, obj):
         request = self.context.get('request')
         return _absolute_url(request, obj.user.avatar) if obj.user else ''
-
+    
     def get_likes(self, obj):
         return 0
 
@@ -81,7 +81,7 @@ class CommentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
         fields = ['text', 'photo_urls']
-
+    
     def create(self, validated_data):
         request = self.context.get('request')
         recipe = self.context.get('recipe')
@@ -137,35 +137,35 @@ class HomeworkSerializer(serializers.ModelSerializer):
 
 
 class HomeworkCreateSerializer(serializers.ModelSerializer):
-    image_url = serializers.CharField(write_only=True, required=False)
-
+    image_base64 = serializers.CharField(write_only=True, required=False)
+    
     class Meta:
         model = Homework
-        fields = ['image', 'image_url', 'review', 'rating']
+        fields = ['image', 'image_base64', 'review', 'rating']
         extra_kwargs = {
             'image': {'required': False},
             'review': {'required': False},
             'rating': {'required': False},
         }
-
+    
     def create(self, validated_data):
         import base64
         import uuid
         from django.core.files.base import ContentFile
-
+        
         request = self.context.get('request')
         recipe = self.context.get('recipe')
-
-        image_url = validated_data.pop('image_url', None)
+        
+        image_base64 = validated_data.pop('image_base64', None)
         image = validated_data.get('image')
-
-        if image_url and not image:
-            if ';base64,' in image_url:
-                fmt, imgstr = image_url.split(';base64,')
+        
+        if image_base64 and not image:
+            if ';base64,' in image_base64:
+                fmt, imgstr = image_base64.split(';base64,')
                 ext = fmt.split('/')[-1] or 'jpg'
                 filename = f"{uuid.uuid4().hex}.{ext}"
                 image = ContentFile(base64.b64decode(imgstr), name=filename)
-
+        
         return Homework.objects.create(
             user=request.user,
             recipe=recipe,
@@ -176,38 +176,38 @@ class HomeworkCreateSerializer(serializers.ModelSerializer):
 
 
 class HomeworkUpdateSerializer(serializers.ModelSerializer):
-    image_url = serializers.CharField(write_only=True, required=False)
-
+    image_base64 = serializers.CharField(write_only=True, required=False)
+    
     class Meta:
         model = Homework
-        fields = ['image', 'image_url', 'review', 'rating']
+        fields = ['image', 'image_base64', 'review', 'rating']
         extra_kwargs = {
             'image': {'required': False},
             'review': {'required': False},
             'rating': {'required': False},
         }
-
+    
     def update(self, instance, validated_data):
         import base64
         import uuid
         from django.core.files.base import ContentFile
-
-        image_url = validated_data.pop('image_url', None)
-
-        if image_url:
-            if ';base64,' in image_url:
-                fmt, imgstr = image_url.split(';base64,')
-                ext = fmt.split('/')[-1] or 'jpg'
-                filename = f"{uuid.uuid4().hex}.{ext}"
-                instance.image = ContentFile(base64.b64decode(imgstr), name=filename)
-
+        
+        image_base64 = validated_data.pop('image_base64', None)
+        
+        # Only replace the image when a new base64 payload is provided.
+        if image_base64 and ';base64,' in image_base64:
+            fmt, imgstr = image_base64.split(';base64,')
+            ext = fmt.split('/')[-1] or 'jpg'
+            filename = f"{uuid.uuid4().hex}.{ext}"
+            instance.image = ContentFile(base64.b64decode(imgstr), name=filename)
+        
         if 'review' in validated_data:
             instance.review = validated_data['review']
         if 'rating' in validated_data:
             instance.rating = validated_data['rating']
         if 'image' in validated_data:
             instance.image = validated_data['image']
-
+        
         instance.save()
         return instance
 
@@ -266,27 +266,27 @@ class RecipeDetailSerializer(serializers.ModelSerializer):
     is_liked = serializers.SerializerMethodField()
     formatted_duration = serializers.CharField(read_only=True)
     difficulty_text = serializers.CharField(read_only=True)
-
+    
     class Meta:
         model = Recipe
         fields = [
-            'id', 'title', 'description', 'image_url', 'photo_urls',
-            'video_url', 'video_cover_url',
-            'author_id', 'author_user_id', 'author_name',
+            'id', 'title', 'description', 'image_url', 'photo_urls', 
+            'video_url', 'video_cover_url', 
+            'author_id', 'author_user_id', 'author_name',     
             'author_avatar', 'likes_count', 'is_liked', 'comments_count', 'dishes_count',
-            'cuisine_type', 'duration_minutes', 'formatted_duration',
+            'cuisine_type', 'duration_minutes', 'formatted_duration', 
             'difficulty_level', 'difficulty_text', 'tags', 'is_approved', 'cooking_tools',
-            'ingredients', 'steps', 'comments', 'homeworks',
+            'ingredients', 'steps', 'comments', 'homeworks', 
             'created_at', 'updated_at', 'edited_at', 'recommendation'
         ]
-
+    
     def get_author_avatar(self, obj):
         request = self.context.get('request')
         return _absolute_url(request, obj.author.avatar) if obj.author else ''
-
+    
     def get_likes_count(self, obj):
         return obj.likes.count()
-
+    
     def get_is_liked(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
@@ -302,7 +302,7 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
     cooking_tools = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
     ingredients = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
     steps = serializers.ListField(child=serializers.DictField(), write_only=True)
-
+    
     class Meta:
         model = Recipe
         fields = [
@@ -316,33 +316,33 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
             'video_cover_url': {'required': False, 'allow_null': True},
             'image_url': {'required': False, 'allow_null': True},
         }
-
+    
     def create(self, validated_data):
         tags_data = validated_data.pop('tags', [])
         tools_data = validated_data.pop('cooking_tools', [])
         ingredients_data = validated_data.pop('ingredients', [])
         steps_data = validated_data.pop('steps', [])
-
+        
         request = self.context.get('request')
         author = request.user if request else None
-
+        
         recipe = Recipe.objects.create(author=author, **validated_data)
-
+        
         for tag_name in tags_data:
             if tag_name and tag_name.strip():
                 Tag.objects.create(recipe=recipe, name=tag_name.strip())
-
+        
         for tool_name in tools_data:
             if tool_name and tool_name.strip():
                 CookingTool.objects.create(recipe=recipe, name=tool_name.strip())
-
+        
         for ing_data in ingredients_data:
             Ingredient.objects.create(
                 recipe=recipe,
                 name=ing_data.get('name', ''),
                 amount=ing_data.get('amount', '')
             )
-
+        
         for idx, step_data in enumerate(steps_data, start=1):
             Step.objects.create(
                 recipe=recipe,
@@ -350,7 +350,7 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
                 instruction=step_data.get('instruction', ''),
                 note=step_data.get('note', None)
             )
-
+        
         return recipe
 
 
@@ -359,7 +359,7 @@ class RecipeUpdateSerializer(serializers.ModelSerializer):
     cooking_tools = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
     ingredients = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
     steps = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
-
+    
     class Meta:
         model = Recipe
         fields = [
@@ -373,29 +373,29 @@ class RecipeUpdateSerializer(serializers.ModelSerializer):
             'video_cover_url': {'required': False, 'allow_null': True},
             'image_url': {'required': False, 'allow_null': True},
         }
-
+    
     def update(self, instance, validated_data):
         tags_data = validated_data.pop('tags', None)
         tools_data = validated_data.pop('cooking_tools', None)
         ingredients_data = validated_data.pop('ingredients', None)
         steps_data = validated_data.pop('steps', None)
-
+        
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-
+        
         if tags_data is not None:
             instance.tags.all().delete()
             for tag_name in tags_data:
                 if tag_name and tag_name.strip():
                     Tag.objects.create(recipe=instance, name=tag_name.strip())
-
+        
         if tools_data is not None:
             instance.cooking_tools.all().delete()
             for tool_name in tools_data:
                 if tool_name and tool_name.strip():
                     CookingTool.objects.create(recipe=instance, name=tool_name.strip())
-
+        
         if ingredients_data is not None:
             instance.ingredients.all().delete()
             for ing_data in ingredients_data:
@@ -404,7 +404,7 @@ class RecipeUpdateSerializer(serializers.ModelSerializer):
                     name=ing_data.get('name', ''),
                     amount=ing_data.get('amount', '')
                 )
-
+        
         if steps_data is not None:
             instance.steps.all().delete()
             for idx, step_data in enumerate(steps_data, start=1):
@@ -414,7 +414,7 @@ class RecipeUpdateSerializer(serializers.ModelSerializer):
                     instruction=step_data.get('instruction', ''),
                     note=step_data.get('note', None) or None
                 )
-
+        
         return instance
 
 
@@ -422,19 +422,19 @@ class RecipeUpdateSerializer(serializers.ModelSerializer):
 class CarouselItemSerializer(serializers.ModelSerializer):
     keywords = serializers.SerializerMethodField()
     image_url_display = serializers.SerializerMethodField()
-
+    
     class Meta:
         model = CarouselItem
         fields = [
-            'id', 'title', 'tags', 'image', 'image_url',
-            'image_url_display', 'keywords', 'order', 'is_active',
+            'id', 'title', 'tags', 'image', 'image_url', 
+            'image_url_display', 'keywords', 'order', 'is_active', 
             'created_at', 'updated_at', 'edited_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-
+    
     def get_keywords(self, obj):
         return obj.get_keywords()
-
+    
     def get_image_url_display(self, obj):
         request = self.context.get('request')
         if obj.image:

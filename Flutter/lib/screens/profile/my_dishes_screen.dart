@@ -1,10 +1,11 @@
-// screens/my_dishes_screen.dart
+// screens/profile/my_dishes_screen.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/homework.dart';
 import '../../services/api_service.dart';
 import '../../utils/url_helper.dart';
 import '../recipes/add_dish_post_screen.dart';
+import '../recipes/post_detail_screen.dart';
 
 class MyDishesScreen extends StatefulWidget {
   final String? userId;
@@ -22,7 +23,6 @@ class _MyDishesScreenState extends State<MyDishesScreen> {
 
   bool get _isOwnProfile => widget.userId == null;
 
-  // 三档评分（只用来显示）
   static const List<Map<String, dynamic>> _ratingOptions = [
     {
       'value': 'good',
@@ -50,7 +50,6 @@ class _MyDishesScreenState extends State<MyDishesScreen> {
     _fetchDishes();
   }
 
-  // ==================== 数据获取 ====================
   Future<void> _fetchDishes() async {
     setState(() {
       _isLoading = true;
@@ -96,9 +95,6 @@ class _MyDishesScreenState extends State<MyDishesScreen> {
         .toList();
   }
 
-  // ==================== 操作 ====================
-
-  /// 🔥 打开 AddDishPostScreen（带旧数据），编辑完回来刷新
   Future<void> _editDish(Homework dish) async {
     final result = await Navigator.push(
       context,
@@ -106,7 +102,6 @@ class _MyDishesScreenState extends State<MyDishesScreen> {
         builder: (_) => AddDishPostScreen(
           recipeId: dish.recipeId,
           recipeTitle: dish.recipeTitle,
-          // 🔥 编辑模式：传旧数据
           existingHomeworkId: dish.id,
           existingReview: dish.review,
           existingRating: dish.rating,
@@ -118,7 +113,6 @@ class _MyDishesScreenState extends State<MyDishesScreen> {
     if (!mounted) return;
 
     if (result == true) {
-      // 重新拉数据（最简单的刷新方式）
       _fetchDishes();
       _showSnack('Dish updated', isError: false);
     }
@@ -172,6 +166,16 @@ class _MyDishesScreenState extends State<MyDishesScreen> {
     }
   }
 
+  void _openRecipe(Homework dish) {
+    if (dish.recipeId.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PostDetailScreen(recipeId: dish.recipeId),
+      ),
+    );
+  }
+
   void _showSnack(String msg, {required bool isError}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -181,7 +185,6 @@ class _MyDishesScreenState extends State<MyDishesScreen> {
     );
   }
 
-  // ==================== Build ====================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -209,7 +212,6 @@ class _MyDishesScreenState extends State<MyDishesScreen> {
       ),
       body: Column(
         children: [
-          // 搜索框
           Padding(
             padding: const EdgeInsets.all(16),
             child: Container(
@@ -323,133 +325,150 @@ class _MyDishesScreenState extends State<MyDishesScreen> {
     final avatarUrl = UrlHelper.fixUrl(dish.userAvatar);
     final dishImage = UrlHelper.fixUrl(dish.imageUrl);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 顶部：Recipe Title + 菜单
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  dish.recipeTitle.isNotEmpty ? dish.recipeTitle : 'Dish',
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF6B4C2A),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (_isOwnProfile) _buildPopupMenu(dish),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 头像
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFFFFD966),
-                  image: avatarUrl.isNotEmpty
-                      ? DecorationImage(
-                          image: NetworkImage(avatarUrl),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
-                ),
-                child: avatarUrl.isEmpty
-                    ? const Icon(Icons.person,
-                        size: 20, color: Color(0xFF6B4C2A))
-                    : null,
-              ),
-              const SizedBox(width: 10),
-
-              // 内容
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (dish.review.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          dish.review,
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: const Color(0xFFC9A96E),
-                            fontStyle: FontStyle.italic,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    if (dishImage.isNotEmpty)
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          dishImage,
-                          height: 120,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            height: 120,
-                            color: const Color(0xFFFFF0B5),
-                            child: const Icon(
-                              Icons.restaurant,
-                              size: 40,
-                              color: Color(0xFFFFD966),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(width: 10),
-
-              // 🔥 Rating 列（只显示，不能点）
-              Column(
+    return GestureDetector(
+      onTap: () => _openRecipe(dish),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ===== Title band =====
+            // Use Stack so the title is centered in the WHOLE band,
+            // regardless of whether the popup menu occupies the right side.
+            Container(
+              width: double.infinity,
+              height: 44,
+              color: const Color(0xFFFFE6B3),
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  for (int i = 0; i < _ratingOptions.length; i++) ...[
-                    _buildRatingDisplay(
-                      icon: _ratingOptions[i]['icon'] as IconData,
-                      type: _ratingOptions[i]['value'] as String,
-                      dish: dish,
-                      color: _ratingOptions[i]['color'] as Color,
+                  // Absolutely centered title
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 44),
+                    child: Text(
+                      dish.recipeTitle.isNotEmpty ? dish.recipeTitle : 'Dish',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF6B4C2A),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    if (i < _ratingOptions.length - 1)
-                      const SizedBox(height: 6),
-                  ],
+                  ),
+                  // Popup menu pinned to the right
+                  if (_isOwnProfile)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(child: _buildPopupMenu(dish)),
+                    ),
                 ],
               ),
-            ],
-          ),
-        ],
+            ),
+            // ===== Body =====
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFFFFD966),
+                      image: avatarUrl.isNotEmpty
+                          ? DecorationImage(
+                              image: NetworkImage(avatarUrl),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
+                    ),
+                    child: avatarUrl.isEmpty
+                        ? const Icon(Icons.person,
+                            size: 20, color: Color(0xFF6B4C2A))
+                        : null,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (dish.review.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              dish.review,
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: const Color(0xFFC9A96E),
+                                fontStyle: FontStyle.italic,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        if (dishImage.isNotEmpty)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              '$dishImage?t=${DateTime.now().millisecondsSinceEpoch}',
+                              height: 120,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                height: 120,
+                                color: const Color(0xFFFFF0B5),
+                                child: const Icon(
+                                  Icons.restaurant,
+                                  size: 40,
+                                  color: Color(0xFFFFD966),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    children: [
+                      for (int i = 0; i < _ratingOptions.length; i++) ...[
+                        _buildRatingDisplay(
+                          icon: _ratingOptions[i]['icon'] as IconData,
+                          type: _ratingOptions[i]['value'] as String,
+                          dish: dish,
+                          color: _ratingOptions[i]['color'] as Color,
+                        ),
+                        if (i < _ratingOptions.length - 1)
+                          const SizedBox(height: 6),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  /// 🔥 纯显示，无 onTap
   Widget _buildRatingDisplay({
     required IconData icon,
     required String type,
@@ -489,7 +508,7 @@ class _MyDishesScreenState extends State<MyDishesScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onSelected: (value) {
         if (value == 'edit') {
-          _editDish(dish);       // 🔥 打开 AddDishPostScreen
+          _editDish(dish);
         } else if (value == 'delete') {
           _deleteDish(dish);
         }

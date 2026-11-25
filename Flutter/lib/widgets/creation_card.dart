@@ -13,9 +13,9 @@ class CreationCard extends StatefulWidget {
   final String userAvatar;
   final String imageUrl;
   final String comment;
-  final String rating; // 'good' | 'ok' | 'bad'
+  final String rating;
   final bool isAuthor;
-  final String? recommendation; // 'chef' | 'official' | null
+  final String? recommendation;
   final int initialLikes;
   final bool initialIsLiked;
 
@@ -189,8 +189,9 @@ class _CreationCardState extends State<CreationCard> {
         children: [
           CircleAvatar(
             backgroundColor: const Color(0xFFFFD966),
-            backgroundImage:
-                widget.userAvatar.isNotEmpty ? NetworkImage(widget.userAvatar) : null,
+            backgroundImage: widget.userAvatar.isNotEmpty
+                ? NetworkImage(widget.userAvatar)
+                : null,
             child: widget.userAvatar.isEmpty
                 ? const Icon(Icons.person, size: 20, color: Color(0xFF6B4C2A))
                 : null,
@@ -200,26 +201,47 @@ class _CreationCardState extends State<CreationCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        widget.userName,
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: const Color(0xFF6B4C2A),
+                // ===== Header row =====
+                // Use a Stack so the rating is pinned to the right edge of the
+                // content area (same right edge as the photo below).
+                SizedBox(
+                  height: 22,
+                  child: Stack(
+                    children: [
+                      // Left: username + author badge (clipped so it never
+                      // overlaps the right-side rating)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 90),
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                widget.userName,
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  color: const Color(0xFF6B4C2A),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (widget.isAuthor) ...[
+                              const SizedBox(width: 6),
+                              const AuthorBadge(),
+                            ],
+                          ],
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    if (widget.isAuthor) ...[
-                      const SizedBox(width: 6),
-                      const AuthorBadge(),
+                      // Right: rating, pinned to the right edge
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(child: _getRatingWidget()),
+                      ),
                     ],
-                    const Spacer(),
-                    _getRatingWidget(),
-                  ],
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(

@@ -710,7 +710,7 @@ class HomeworkListView(generics.ListCreateAPIView):
         if 'image' in request.FILES:
             data['image'] = request.FILES['image']
         elif 'image_base64' in request.POST and request.POST['image_base64']:
-            data['image_url'] = request.POST['image_base64']
+            data['image_base64'] = request.POST['image_base64']
 
         serializer = HomeworkCreateSerializer(
             data=data,
@@ -735,7 +735,7 @@ class HomeworkListView(generics.ListCreateAPIView):
 class HomeworkDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a homework."""
     queryset = Homework.objects.all()
-    serializer_class = HomeworkSerializer
+    serializer_class = HomeworkUpdateSerializer 
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     lookup_field = 'id'
@@ -766,7 +766,7 @@ class HomeworkDetailView(generics.RetrieveUpdateDestroyAPIView):
         if 'image' in request.FILES:
             data['image'] = request.FILES['image']
         elif 'image_base64' in request.POST and request.POST['image_base64']:
-            data['image_url'] = request.POST['image_base64']
+            data['image_base64'] = request.POST['image_base64']
 
         serializer = HomeworkUpdateSerializer(
             homework,

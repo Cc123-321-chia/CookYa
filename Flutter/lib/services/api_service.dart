@@ -10,13 +10,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ApiService {
   static String? _savedBaseUrl;
 
-  // App 启动时调用一次
   static Future<void> loadSavedBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
     _savedBaseUrl = prefs.getString('api_base_url');
   }
 
-  // 用户在设置页填完后调用
   static Future<void> saveBaseUrl(String url) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('api_base_url', url);
@@ -24,39 +22,33 @@ class ApiService {
   }
 
   static String get baseUrl {
-    // 1) 用户手动设置的（最高优先级）
+    const override = String.fromEnvironment('API_BASE_URL', defaultValue: '');
+    if (override.isNotEmpty) return override;
     if (_savedBaseUrl != null && _savedBaseUrl!.isNotEmpty) {
       return _savedBaseUrl!;
     }
-    // 2) 编译时传入的（--dart-define）
-    const override = String.fromEnvironment('API_BASE_URL', defaultValue: '');
-    if (override.isNotEmpty) return override;
-    // 3) 平台默认
     if (kIsWeb) return 'http://localhost:8000/api';
-    return 'http://192.168.1.100:8000/api';  // fallback
+    return 'http://192.168.1.100:8000/api';
   }
 
   static String resolveImageUrl(String? url) {
     if (url == null || url.isEmpty) return '';
-
-    // 相对路径 /media/xxx → 直接拼
+    
     if (url.startsWith('/')) {
       final host = baseUrl.replaceAll(RegExp(r'/api/?$'), '');
       return '$host$url';
     }
-
-    // 🔥 完整 URL → 提取 path，重新拼当前 host
+    
     if (url.startsWith('http://') || url.startsWith('https://')) {
       try {
         final uri = Uri.parse(url);
         final host = baseUrl.replaceAll(RegExp(r'/api/?$'), '');
-        // 路径部分（/media/xxx.jpg）
         return '$host${uri.path}';
       } catch (e) {
         return url;
       }
     }
-
+    
     return url;
   }
 
@@ -156,7 +148,9 @@ class ApiService {
     String? imageBase64,
   }) async {
     try {
-      final uri = Uri.parse('$baseUrl/homeworks/$homeworkId/');
+      final uri = Uri.parse('$baseUrl/recipes/homeworks/$homeworkId/');
+      print('=== UPDATE HOMEWORK URL: $uri ===');
+      print('=== THIS FILE: lib/services/api_service.dart ===');
       final request = http.MultipartRequest('PATCH', uri);
       request.headers['Authorization'] = 'Token $authToken';
       if (review != null) request.fields['review'] = review;
@@ -178,7 +172,7 @@ class ApiService {
   static Future<Map<String, dynamic>> deleteHomework(String homeworkId) async {
     try {
       final response = await http.delete(
-        Uri.parse('$baseUrl/homeworks/$homeworkId/'),
+        Uri.parse('$baseUrl/recipes/homeworks/$homeworkId/'),
         headers: {'Authorization': 'Token $authToken'},
       );
       if (response.statusCode == 200) return {'success': true};
