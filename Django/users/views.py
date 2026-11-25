@@ -1104,17 +1104,25 @@ def list_stickers(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_mentors(request):
-    """Return all users with is_mentor=True, excluding current user."""
-    users = User.objects.filter(is_mentor=True, is_active=True).exclude(id=request.user.id)
+    """Return all users with is_mentor=True, excluding current user and admins."""
+    users = User.objects.filter(
+        is_mentor=True,
+        is_active=True,
+        is_staff=False,
+        is_superuser=False,
+    ).exclude(id=request.user.id)
     serializer = UserSerializer(users, many=True, context={'request': request})
     return Response({'success': True, 'data': serializer.data})
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_all_users(request):
-    """Return all active users, excluding current user."""
-    users = User.objects.filter(is_active=True).exclude(id=request.user.id).order_by('-points')
+    """Return all active users, excluding current user and admins."""
+    users = User.objects.filter(
+        is_active=True,
+        is_staff=False,
+        is_superuser=False,
+    ).exclude(id=request.user.id).order_by('-points')
     serializer = UserSerializer(users, many=True, context={'request': request})
     return Response({'success': True, 'data': serializer.data})
 
