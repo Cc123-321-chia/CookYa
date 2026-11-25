@@ -29,7 +29,7 @@ DATA_UPLOAD_MAX_FILE_SIZE = 50 * 1024 * 1024
 # Application definition
 
 INSTALLED_APPS = [
-    "daphne",
+    "daphne", 
     "channels",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -38,7 +38,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     'rest_framework',
-    'rest_framework.authtoken',
+    'rest_framework.authtoken', 
     'corsheaders',
     'users.apps.UsersConfig',
     'recipes',
@@ -79,7 +79,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = True 
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_METHODS = [
@@ -108,13 +108,22 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:5000",
     'http://localhost:8080',
-    'http://127.0.0.1:8080',
+    'http://127.0.0.1:8080', 
 ]
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# ==================== Email configuration ====================
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 465
+EMAIL_USE_SSL = True
+EMAIL_USE_TLS = False  
+EMAIL_HOST_USER = 'tewcchia0548@gmail.com'
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = 'CookYa <tewcchia0548@gmail.com>'
+# ==========================================================
 
 ROOT_URLCONF = "CookYaBackend.urls"
 
@@ -174,7 +183,7 @@ USE_TZ = True
 
 # Static files
 STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_ROOT = BASE_DIR / 'staticfiles' 
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

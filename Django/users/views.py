@@ -1,5 +1,12 @@
 # users/views.py
 import random
+import secrets
+import smtplib
+from email.message import EmailMessage
+from datetime import timedelta
+from django.core.mail import send_mail
+from django.conf import settings
+from .models import PasswordResetCode
 from rest_framework import status
 from rest_framework.decorators import (
     api_view, permission_classes, parser_classes, authentication_classes,
@@ -152,17 +159,163 @@ def update_profile(request):
 # ==================== Password / Email ====================
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def password_reset_request(request):
-    email = request.data.get('email')
+    email = request.data.get('email', '').strip()
     if not email:
-        return Response({'success': False, 'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'success': False, 'error': 'Email is required'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
     try:
         user = User.objects.get(email=email)
-        return Response({'success': True, 'message': 'Password reset link would be sent to your email'})
     except User.DoesNotExist:
-        return Response({'success': False, 'error': 'No user found with this email'}, status=status.HTTP_404_NOT_FOUND)
+        # Security consideration: Do not reveal whether an email address exists; always return "success."
+        return Response({'success': True,
+                         'message': 'If this email exists, a code has been sent.'})
 
+    # Generate a 6-digit number code（100000~999999）
+    code = str(random.randint(100000, 999999))
+
+    # Invalidate the unused portion of this user's code.
+    PasswordResetCode.objects.filter(user=user, is_used=False).update(is_used=True)
+
+    # Save new code, expires in 10 minutes.
+    PasswordResetCode.objects.create(
+        user=user,
+        code=code,
+        expires_at=timezone.now() + timedelta(minutes=10),
+    )
+
+        # Send Email via smtplib directly (bypasses Django's SMTP local_hostname bug)
+    try:
+        msg = EmailMessage()
+        msg['Subject'] = 'CookYa - Password Reset Code'
+        msg['From'] = settings.DEFAULT_FROM_EMAIL
+        msg['To'] = email
+        msg.set_content(
+            f'Hi {user.username},\n\n'
+            f'Your password reset code is:\n\n'
+            f'    {code}\n\n'
+            f'This code expires in 10 minutes.\n'
+            f'If you did not request this, please ignore this email.\n\n'
+            f'- CookYa Team'
+        )
+
+        # SMTP_SSL on port 465 (more reliable than STARTTLS on 587 in many networks)
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=15) as server:
+            server.login(settings.EMAIL_HOST_USER, settings.EMAIL_HOST_PASSWORD)
+            server.send_message(msg)
+
+    except Exception as e:
+        print(f'Send mail error: {type(e).__name__}: {e}')
+        return Response({'success': False, 'error': 'Failed to send email. Try again later.'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response({'success': True,
+                     'message': 'Verification code sent to your email.'})
+
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def verify_reset_code(request):
+    """
+    The frontend calls this after receiving the `code`. 
+    On success, it returns a `reset_token`, which the frontend then uses to change the password.
+    """
+    email = request.data.get('email', '').strip()
+    code = request.data.get('code', '').strip()
+
+    if not email or not code:
+        return Response({'success': False, 'error': 'Email and code are required'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if len(code) != 6 or not code.isdigit():
+        return Response({'success': False, 'error': 'Code must be 6 digits'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response({'success': False, 'error': 'Invalid code'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    # Find the latest, unused code
+    record = PasswordResetCode.objects.filter(
+        user=user, is_used=False
+    ).order_by('-created_at').first()
+
+    if record is None:
+        return Response({'success': False, 'error': 'No active code. Request a new one.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if record.is_expired():
+        return Response({'success': False, 'error': 'Code expired. Request a new one.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if record.attempts >= 5:
+        return Response({'success': False, 'error': 'Too many attempts. Request a new code.'},
+                        status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+    if record.code != code:
+        record.attempts += 1
+        record.save(update_fields=['attempts'])
+        remaining = 5 - record.attempts
+        return Response({'success': False,
+                         'error': f'Incorrect code. {remaining} attempt(s) left.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    # Code is correct → Generate `reset_token`
+    token = secrets.token_urlsafe(32)
+    record.reset_token = token
+    record.is_verified = True
+    record.save(update_fields=['reset_token', 'is_verified'])
+
+    return Response({'success': True, 'reset_token': token})
+
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def confirm_password_reset(request):
+    """
+    The frontend should call this, passing the `reset_token` and `new_password`.
+    """
+    token = request.data.get('reset_token', '').strip()
+    new_password = request.data.get('new_password', '')
+    confirm_password = request.data.get('confirm_password', '')
+
+    if not token or not new_password:
+        return Response({'success': False, 'error': 'Missing fields'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if new_password != confirm_password:
+        return Response({'success': False, 'error': 'Passwords do not match'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if len(new_password) < 4:
+        return Response({'success': False, 'error': 'Password too short'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    record = PasswordResetCode.objects.filter(
+        reset_token=token, is_verified=True, is_used=False
+    ).order_by('-created_at').first()
+
+    if record is None:
+        return Response({'success': False, 'error': 'Invalid or used token'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if record.is_expired():
+        return Response({'success': False, 'error': 'Token expired'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    user = record.user
+    user.set_password(new_password)
+    user.save()
+
+    record.is_used = True
+    record.save(update_fields=['is_used'])
+
+    return Response({'success': True, 'message': 'Password reset successfully'})
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -779,7 +932,7 @@ def get_call_room(request, room_id):
             'caller_id': room.caller_id,
             'receiver_id': room.receiver_id,
             'call_type': room.call_type,
-            'caller_peer_id': room.caller_peer_id,
+            'caller_peer_id': room.caller_peer_id, 
             'is_active': room.is_active,
         }
     })

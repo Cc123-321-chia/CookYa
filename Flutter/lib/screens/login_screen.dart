@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'main_navigation.dart';
 import 'package:cookyaapp/services/api_service.dart';
+import 'enter_code_screen.dart'; // Needed so we can navigate to the 6-digit code screen
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,15 +22,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final String _cookingPhotoUrl = 'assets/splash.png';
 
+  // ==================== LOGIN ====================
   Future<void> _login() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       _showCenterDialog('Please enter email and password', isError: true);
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final response = await http.post(
@@ -41,18 +41,21 @@ class _LoginScreenState extends State<LoginScreen> {
         }),
       );
 
+      // Guard: widget might have been disposed while waiting
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true && data['data']['token'] != null) {
           ApiService.authToken = data['data']['token'];
           _showCenterDialog('Login successful!', isError: false);
 
+          // Small delay so the user can read the success dialog
           Future.delayed(const Duration(seconds: 1), () {
+            if (!mounted) return;
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(
-                builder: (context) => const MainNavigation(),
-              ),
+              MaterialPageRoute(builder: (context) => const MainNavigation()),
             );
           });
         } else {
@@ -60,20 +63,22 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       } else {
         final data = json.decode(response.body);
-        _showCenterDialog(data['error'] ?? 'Invalid email or password', isError: true);
+        _showCenterDialog(
+          data['error'] ?? 'Invalid email or password',
+          isError: true,
+        );
       }
     } catch (e) {
+      if (!mounted) return;
       _showCenterDialog('Connection error. Please try again.', isError: true);
       debugPrint('Login error: $e');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // ==================== REUSABLE DIALOG ====================
+  // Shows a small centered dialog with an icon + message.
   void _showCenterDialog(String message, {required bool isError}) {
     showDialog(
       context: context,
@@ -83,7 +88,8 @@ class _LoginScreenState extends State<LoginScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           content: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -94,10 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(width: 12),
               Flexible(
-                child: Text(
-                  message,
-                  style: const TextStyle(fontSize: 14),
-                ),
+                child: Text(message, style: const TextStyle(fontSize: 14)),
               ),
             ],
           ),
@@ -106,6 +109,152 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // ==================== FORGOT PASSWORD ====================
+  // Step 1: ask the user for their email, call the backend,
+  // then navigate to EnterCodeScreen to type the 6-digit code.
+  void _showForgetPasswordDialog() {
+    final TextEditingController emailController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Center(
+            child: Text(
+              'Forgot Password',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF6B4C2A),
+              ),
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter your email address and we will send you a 6-digit code.',
+                style: TextStyle(color: Color(0xFFC9A96E), fontSize: 14),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: emailController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'your@email.com',
+                  hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+                  labelText: 'Email Address',
+                  labelStyle: const TextStyle(color: Color(0xFFC9A96E)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: Color(0xFFFFB347), width: 2),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.done,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final email = emailController.text.trim();
+                if (email.isEmpty) {
+                  _showCenterDialog('Please enter your email', isError: true);
+                  return;
+                }
+
+                // Close the dialog first, then do the network call
+                Navigator.pop(dialogContext);
+
+                final sent = await _sendPasswordResetEmail(email);
+                if (!mounted) return;
+
+                if (sent) {
+                  // Navigate to the 6-digit code screen
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => EnterCodeScreen(email: email),
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFD966),
+                foregroundColor: const Color(0xFF6B4C2A),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Send Code',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Sends the reset request to the backend.
+  // Returns true on success, false on failure.
+  Future<bool> _sendPasswordResetEmail(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiService.baseUrl}/users/password-reset/'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'email': email}),
+      );
+
+      if (!mounted) return false;
+
+      final data = json.decode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        _showCenterDialog(
+          data['message'] ?? 'Verification code sent!',
+          isError: false,
+        );
+        return true;
+      } else {
+        _showCenterDialog(data['error'] ?? 'Email not found', isError: true);
+        return false;
+      }
+    } catch (e) {
+      if (!mounted) return false;
+      _showCenterDialog(
+        'Error sending code. Please try again.',
+        isError: true,
+      );
+      return false;
+    }
+  }
+
+  // ==================== UI ====================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -152,7 +301,8 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               color: Colors.white,
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -176,6 +326,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 30),
+
+                    // --- Email field ---
                     TextField(
                       controller: _emailController,
                       decoration: InputDecoration(
@@ -191,7 +343,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFFFB347), width: 2),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFFB347),
+                            width: 2,
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -201,6 +356,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 16),
+
+                    // --- Password field ---
                     TextField(
                       controller: _passwordController,
                       decoration: InputDecoration(
@@ -210,7 +367,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
                             color: const Color(0xFFC9A96E),
                           ),
                           onPressed: () {
@@ -227,7 +386,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFFFB347), width: 2),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFFB347),
+                            width: 2,
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -236,24 +398,19 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       obscureText: _obscurePassword,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 4),
+
+                    // --- Forgot password link ---
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: () {
-                          _showForgetPasswordDialog();
-                        },
-                        child: const Text(
-                          'Forgot Password?',
-                          style: TextStyle(
-                            color: Color(0xFFFFB347),
-                            fontWeight: FontWeight.w500,
-                            fontSize: 14,
-                          ),
-                        ),
+                        onPressed: _showForgetPasswordDialog,
+                        child: const Text('Forgot Password?'),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 4),
+
+                    // --- Login button ---
                     ElevatedButton(
                       onPressed: _isLoading ? null : _login,
                       style: ElevatedButton.styleFrom(
@@ -271,7 +428,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B4C2A)),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF6B4C2A),
+                                ),
                               ),
                             )
                           : const Text(
@@ -283,6 +442,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                     ),
                     const SizedBox(height: 20),
+
+                    // --- "or" divider ---
                     Row(
                       children: [
                         Expanded(
@@ -310,6 +471,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                     const SizedBox(height: 20),
+
+                    // --- Sign up link ---
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -350,135 +513,9 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-
-  void _showForgetPasswordDialog() {
-    final TextEditingController emailController = TextEditingController();
-
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (BuildContext context) {
-        Future.delayed(const Duration(milliseconds: 100), () {
-          FocusScope.of(context).requestFocus(_emailFocusNode);
-        });
-
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: const Center(
-            child: Text(
-              'Reset Password',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF6B4C2A),
-              ),
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Enter your email address to receive a password reset link:',
-                style: TextStyle(color: Color(0xFFC9A96E), fontSize: 14),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: emailController,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: 'your@email.com',
-                  hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-                  labelText: 'Email Address',
-                  labelStyle: const TextStyle(color: Color(0xFFC9A96E)),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFFFFB347), width: 2),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                ),
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (value) {
-                  if (value.isNotEmpty) {
-                    _sendPasswordResetEmail(value);
-                    Navigator.pop(context);
-                  } else {
-                    _showCenterDialog('Please enter your email', isError: true);
-                  }
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              ),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Colors.grey, fontSize: 16),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (emailController.text.isNotEmpty) {
-                  _sendPasswordResetEmail(emailController.text);
-                  Navigator.pop(context);
-                } else {
-                  _showCenterDialog('Please enter your email', isError: true);
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFD966),
-                foregroundColor: const Color(0xFF6B4C2A),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'Send',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _sendPasswordResetEmail(String email) async {
-    try {
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/users/password-reset/'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'email': email}),
-      );
-
-      final data = json.decode(response.body);
-      if (response.statusCode == 200 && data['success'] == true) {
-        _showCenterDialog(data['message'] ?? 'Password reset link sent!', isError: false);
-      } else {
-        _showCenterDialog(data['error'] ?? 'Email not found', isError: true);
-      }
-    } catch (e) {
-      _showCenterDialog('Error sending reset link. Please try again.', isError: true);
-    }
-  }
 }
 
-// Register Screen
+// ==================== REGISTER SCREEN ====================
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -490,7 +527,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -536,6 +574,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  // ==================== REGISTER ====================
   Future<void> _register() async {
     if (_usernameController.text.isEmpty ||
         _emailController.text.isEmpty ||
@@ -563,12 +602,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
         }),
       );
 
+      if (!mounted) return;
+
       final data = json.decode(response.body);
 
       if (response.statusCode == 201 && data['success'] == true) {
-        _showCenterDialog('Registration successful! Please login.', isError: false);
-        Future.delayed(const Duration(seconds: 1), () => Navigator.pop(context));
+        _showCenterDialog('Registration successful! Please login.',
+            isError: false);
+        Future.delayed(const Duration(seconds: 1), () {
+          if (!mounted) return;
+          Navigator.pop(context);
+        });
       } else {
+        // Pick the first field error returned by the serializer
         String errorMsg = 'Registration failed';
         if (data['error'] is Map) {
           if (data['error']['username'] != null) {
@@ -586,10 +632,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _showCenterDialog(errorMsg, isError: true);
       }
     } catch (e) {
+      if (!mounted) return;
       _showCenterDialog('Connection error. Please try again.', isError: true);
       debugPrint('Register error: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -626,7 +673,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
               width: double.infinity,
               color: Colors.white,
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -650,19 +698,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 25),
+
+                    // --- Username ---
                     TextField(
                       controller: _usernameController,
                       decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.person_outline, color: Color(0xFFC9A96E)),
+                        prefixIcon: const Icon(Icons.person_outline,
+                            color: Color(0xFFC9A96E)),
                         labelText: 'Username',
-                        labelStyle: const TextStyle(color: Color(0xFFC9A96E)),
+                        labelStyle:
+                            const TextStyle(color: Color(0xFFC9A96E)),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFFFB347), width: 2),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFFB347),
+                            width: 2,
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -671,19 +726,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+
+                    // --- Email ---
                     TextField(
                       controller: _emailController,
                       decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFFC9A96E)),
+                        prefixIcon: const Icon(Icons.email_outlined,
+                            color: Color(0xFFC9A96E)),
                         labelText: 'Email',
-                        labelStyle: const TextStyle(color: Color(0xFFC9A96E)),
+                        labelStyle:
+                            const TextStyle(color: Color(0xFFC9A96E)),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFFFB347), width: 2),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFFB347),
+                            width: 2,
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -693,13 +755,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 16),
+
+                    // --- Password ---
                     TextField(
                       controller: _passwordController,
                       decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFFC9A96E)),
+                        prefixIcon: const Icon(Icons.lock_outline,
+                            color: Color(0xFFC9A96E)),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
                             color: const Color(0xFFC9A96E),
                           ),
                           onPressed: () {
@@ -709,14 +776,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           },
                         ),
                         labelText: 'Password',
-                        labelStyle: const TextStyle(color: Color(0xFFC9A96E)),
+                        labelStyle:
+                            const TextStyle(color: Color(0xFFC9A96E)),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFFFB347), width: 2),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFFB347),
+                            width: 2,
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -726,30 +797,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       obscureText: _obscurePassword,
                     ),
                     const SizedBox(height: 16),
+
+                    // --- Confirm password ---
                     TextField(
                       controller: _confirmPasswordController,
                       decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFFC9A96E)),
+                        prefixIcon: const Icon(Icons.lock_outline,
+                            color: Color(0xFFC9A96E)),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                            _obscureConfirmPassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
                             color: const Color(0xFFC9A96E),
                           ),
                           onPressed: () {
                             setState(() {
-                              _obscureConfirmPassword = !_obscureConfirmPassword;
+                              _obscureConfirmPassword =
+                                  !_obscureConfirmPassword;
                             });
                           },
                         ),
                         labelText: 'Confirm Password',
-                        labelStyle: const TextStyle(color: Color(0xFFC9A96E)),
+                        labelStyle:
+                            const TextStyle(color: Color(0xFFC9A96E)),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFFFB347), width: 2),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFFB347),
+                            width: 2,
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -759,6 +840,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       obscureText: _obscureConfirmPassword,
                     ),
                     const SizedBox(height: 30),
+
+                    // --- Sign up button ---
                     ElevatedButton(
                       onPressed: _isLoading ? null : _register,
                       style: ElevatedButton.styleFrom(
@@ -776,7 +859,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               width: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B4C2A)),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF6B4C2A),
+                                ),
                               ),
                             )
                           : const Text(
@@ -788,6 +873,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                     ),
                     const SizedBox(height: 20),
+
+                    // --- Back to login ---
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -796,9 +883,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           style: TextStyle(color: Color(0xFF6B4C2A)),
                         ),
                         TextButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
+                          onPressed: () => Navigator.pop(context),
                           child: const Text(
                             'Log In',
                             style: TextStyle(

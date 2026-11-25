@@ -386,7 +386,7 @@ class Message(models.Model):
     message_type = models.CharField(max_length=30, default='text')
     media = models.FileField(upload_to='chat_media/', null=True, blank=True)
     sticker_id = models.IntegerField(null=True, blank=True)
-    related_id = models.CharField(max_length=100, blank=True, default='')
+    related_id = models.CharField(max_length=100, blank=True, default='') 
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
@@ -414,7 +414,7 @@ class Message(models.Model):
             'message_type': self.message_type,
             'media_url': media_url,
             'sticker_id': self.sticker_id,
-            'related_id': self.related_id,
+            'related_id': self.related_id, 
             'is_read': self.is_read,
             'created_at': self.created_at.isoformat(),
         }
@@ -551,3 +551,26 @@ class ChatClearRecord(models.Model):
 
     def __str__(self):
         return f"{self.user.username} cleared chat with {self.other_user_id} @ {self.cleared_at}"
+
+class PasswordResetCode(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reset_codes')
+    code = models.CharField(max_length=6)             
+    reset_token = models.CharField(max_length=64, blank=True, null=True) 
+    is_verified = models.BooleanField(default=False)   
+    is_used = models.BooleanField(default=False)      
+    attempts = models.IntegerField(default=0)        
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()                
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['code']),
+        ]
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+    def __str__(self):
+        return f"{self.user.email} - {self.code}"
