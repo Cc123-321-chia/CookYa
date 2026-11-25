@@ -83,6 +83,7 @@ class CookingClass(models.Model):
     cover_video = models.FileField(upload_to='classes/videos/', null=True, blank=True)
     location = models.CharField(max_length=200, blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    currency = models.CharField(max_length=8, default='RM') 
     rating = models.FloatField(default=0)
     class_type = models.CharField(max_length=20, choices=CLASS_TYPE_CHOICES, default='in_person')
     schedule = models.CharField(max_length=200, blank=True)
