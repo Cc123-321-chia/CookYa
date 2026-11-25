@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/api_service.dart';
 import '../../models/booking_models.dart';
+import 'package:video_compress/video_compress.dart';
 
 class AddEditClassScreen extends StatefulWidget {
   final CookingClassModel? existingClass;
@@ -41,23 +42,22 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
   ];
 
   File? _newImage;
-  File? _newCoverVideo;
   String? _existingImageUrl;
-  String? _existingCoverVideoUrl;
-  String? _coverVideoThumbnailPath;
 
   final List<_GalleryItem> _galleryImages = [];
   final List<_GalleryItem> _galleryVideos = [];
 
   final ImagePicker _picker = ImagePicker();
   bool _saving = false;
+  bool _compressing = false;
+  bool _removeCoverImage = false;
+  final List<String> _removedImageIds = [];
+  final List<String> _removedVideoIds = [];
 
   final _availableTags = ['In-Person', 'Home Visit', 'Certificate'];
   final _tagCtrl = TextEditingController();
   final _dishCtrl = TextEditingController();
   final _certCtrl = TextEditingController();
-
-  VideoPlayerController? _videoPreviewController;
 
   @override
   void initState() {
@@ -70,26 +70,29 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
       _priceCtrl.text = _formatPriceForEdit(c.price);
       _scheduleCtrl.text = c.schedule;
       _classType = c.classType;
+      _selectedCurrency = c.currency.isNotEmpty ? c.currency : 'RM';
       _tags = List.from(c.tags);
       _dishes = List.from(c.dishes);
       _certificates = List.from(c.certificates);
 
       if (c.image.isNotEmpty) _existingImageUrl = c.image;
-      if (c.coverVideo.isNotEmpty) _existingCoverVideoUrl = c.coverVideo;
 
       for (final img in c.images) {
-        _galleryImages.add(_GalleryItem(url: img));
+        _galleryImages.add(_GalleryItem(id: img.id, url: img.image));
       }
       for (final v in c.videos) {
-        _galleryVideos.add(_GalleryItem(url: v.video));
+        _galleryVideos.add(_GalleryItem(id: v.id, url: v.video));
       }
 
-      if (_existingCoverVideoUrl != null &&
-          _existingCoverVideoUrl!.isNotEmpty) {
-        _initVideoPreviewFromUrl(
-            ApiService.resolveImageUrl(_existingCoverVideoUrl!));
-        _generateThumbnailFromUrl(
-            ApiService.resolveImageUrl(_existingCoverVideoUrl!));
+      // Generate first-frame thumbnails for existing server-side gallery videos.
+      // .mov/HEVC may fail on Android and fall back to the icon placeholder.
+      for (int i = 0; i < c.videos.length; i++) {
+        final raw = c.videos[i].video;
+        if (raw.isEmpty) continue;
+        _generateGalleryThumbnailFromUrl(
+          i,
+          ApiService.resolveImageUrl(raw),
+        );
       }
     }
   }
@@ -109,7 +112,6 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
     _tagCtrl.dispose();
     _dishCtrl.dispose();
     _certCtrl.dispose();
-    _videoPreviewController?.dispose();
     super.dispose();
   }
 
@@ -121,7 +123,31 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
 
   Future<void> _pickVideo(Function(File) onPicked) async {
     final x = await _picker.pickVideo(source: ImageSource.gallery);
-    if (x != null) onPicked(File(x.path));
+    if (x == null) return;
+
+    final original = File(x.path);
+    setState(() => _compressing = true);
+    try {
+      // Compress to H.264 mp4 so Android/iOS can both play it.
+      final result = await VideoCompress.compressVideo(
+        original.path,
+        quality: VideoQuality.MediumQuality,
+        deleteOrigin: false,
+        includeAudio: true,
+      );
+      final compressedPath = result?.file?.path;
+      if (compressedPath != null && compressedPath.isNotEmpty) {
+        onPicked(File(compressedPath));
+      } else {
+        // Fallback: keep original if compression fails (e.g. iOS simulator).
+        onPicked(original);
+      }
+    } catch (e) {
+      debugPrint('Video compress error: $e');
+      onPicked(original);
+    } finally {
+      if (mounted) setState(() => _compressing = false);
+    }
   }
 
   Future<void> _pickMultiImages() async {
@@ -144,62 +170,6 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
     }
   }
 
-  Future<void> _initVideoPreviewFromFile(File file) async {
-    _videoPreviewController?.dispose();
-    _videoPreviewController = VideoPlayerController.file(file);
-    await _videoPreviewController!.initialize();
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _initVideoPreviewFromUrl(String url) async {
-    _videoPreviewController?.dispose();
-    _videoPreviewController = VideoPlayerController.networkUrl(Uri.parse(url));
-    await _videoPreviewController!.initialize();
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _generateThumbnailFromFile(File file) async {
-    try {
-      final bytes = await VideoThumbnail.thumbnailData(
-        video: file.path,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: 400,
-        quality: 75,
-        timeMs: 0,
-      );
-      if (bytes == null) return;
-      final dir = await getTemporaryDirectory();
-      final out = File(
-          '${dir.path}/cover_thumb_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await out.writeAsBytes(bytes);
-      if (!mounted) return;
-      setState(() => _coverVideoThumbnailPath = out.path);
-    } catch (e) {
-      debugPrint('Thumbnail from file error: $e');
-    }
-  }
-
-  Future<void> _generateThumbnailFromUrl(String url) async {
-    try {
-      final bytes = await VideoThumbnail.thumbnailData(
-        video: url,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: 400,
-        quality: 75,
-        timeMs: 0,
-      );
-      if (bytes == null) return;
-      final dir = await getTemporaryDirectory();
-      final out = File(
-          '${dir.path}/cover_thumb_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await out.writeAsBytes(bytes);
-      if (!mounted) return;
-      setState(() => _coverVideoThumbnailPath = out.path);
-    } catch (e) {
-      debugPrint('Thumbnail from url error: $e');
-    }
-  }
-
   Future<void> _generateGalleryThumbnail(int index, File file) async {
     try {
       final bytes = await VideoThumbnail.thumbnailData(
@@ -217,9 +187,11 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
       if (!mounted) return;
       if (index < _galleryVideos.length) {
         setState(() {
+          final old = _galleryVideos[index];
           _galleryVideos[index] = _GalleryItem(
-            file: _galleryVideos[index].file,
-            url: _galleryVideos[index].url,
+            id: old.id,
+            file: old.file,
+            url: old.url,
             thumbnailPath: out.path,
           );
         });
@@ -229,25 +201,35 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
     }
   }
 
-  void _showVideoPreviewDialog() {
-    if (_videoPreviewController == null ||
-        !_videoPreviewController!.value.isInitialized) {
-      _showSnack('Video preview not ready');
-      return;
+  Future<void> _generateGalleryThumbnailFromUrl(int index, String url) async {
+    try {
+      final bytes = await VideoThumbnail.thumbnailData(
+        video: url,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 300,
+        quality: 70,
+        timeMs: 0,
+      );
+      if (bytes == null) return;
+      final dir = await getTemporaryDirectory();
+      final out = File(
+          '${dir.path}/gallery_thumb_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await out.writeAsBytes(bytes);
+      if (!mounted) return;
+      if (index < _galleryVideos.length) {
+        setState(() {
+          final old = _galleryVideos[index];
+          _galleryVideos[index] = _GalleryItem(
+            id: old.id,
+            file: old.file,
+            url: old.url,
+            thumbnailPath: out.path,
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('Gallery thumbnail (url) error: $e');
     }
-    _videoPreviewController!.play();
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.black,
-        child: AspectRatio(
-          aspectRatio: _videoPreviewController!.value.aspectRatio,
-          child: VideoPlayer(_videoPreviewController!),
-        ),
-      ),
-    ).then((_) {
-      _videoPreviewController?.pause();
-    });
   }
 
   void _showImagePreviewDialog(String url) {
@@ -323,15 +305,18 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
         description: _descCtrl.text.trim(),
         location: _locationCtrl.text.trim(),
         price: price,
+        currency: _selectedCurrency,
         classType: _classType,
         schedule: _scheduleCtrl.text.trim(),
         tags: _tags,
         dishes: _dishes,
         certificates: _certificates,
         image: _newImage,
-        coverVideo: _newCoverVideo,
         newImages: newGalleryImages,
         newVideos: newGalleryVideos,
+        removeCoverImage: _removeCoverImage,
+        removedImageIds: _removedImageIds,
+        removedVideoIds: _removedVideoIds,
       );
     } else {
       result = await ApiService.createClass(
@@ -339,13 +324,13 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
         description: _descCtrl.text.trim(),
         location: _locationCtrl.text.trim(),
         price: price,
+        currency: _selectedCurrency,
         classType: _classType,
         schedule: _scheduleCtrl.text.trim(),
         tags: _tags,
         dishes: _dishes,
         certificates: _certificates,
         image: _newImage,
-        coverVideo: _newCoverVideo,
         images: newGalleryImages,
         videos: newGalleryVideos,
       );
@@ -639,11 +624,6 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
                       _buildCoverImageTile(),
 
                       const SizedBox(height: 24),
-                      _sectionTitle('Cover Video (optional)', Icons.videocam),
-                      const SizedBox(height: 12),
-                      _buildCoverVideoTile(),
-
-                      const SizedBox(height: 24),
                       _sectionTitle('Gallery Images', Icons.photo_library),
                       const SizedBox(height: 12),
                       _buildGalleryImagesSection(),
@@ -761,12 +741,16 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
         onRemove: () => setState(() => _newImage = null),
       );
     }
-    if (hasExisting) {
+    if (hasExisting && !_removeCoverImage) {
       return _networkImagePreviewTile(
         url: _existingImageUrl!,
         label: 'Cover Image',
         onReplace: () => _pickImage((f) {
           setState(() => _newImage = f);
+        }),
+        onRemove: () => setState(() {
+          _removeCoverImage = true;
+          _existingImageUrl = null;
         }),
       );
     }
@@ -775,67 +759,6 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
       label: 'Upload Cover Image',
       onTap: () => _pickImage((f) {
         setState(() => _newImage = f);
-      }),
-    );
-  }
-
-  Widget _buildCoverVideoTile() {
-    final hasNewFile = _newCoverVideo != null;
-    final hasExisting =
-        _existingCoverVideoUrl != null && _existingCoverVideoUrl!.isNotEmpty;
-
-    if (hasNewFile) {
-      return _videoPreviewTile(
-        // Tap the card body to re-pick a new video
-        onTapBody: () => _pickVideo((f) {
-          setState(() {
-            _newCoverVideo = f;
-            _existingCoverVideoUrl = null;
-            _coverVideoThumbnailPath = null;
-          });
-          _initVideoPreviewFromFile(f);
-          _generateThumbnailFromFile(f);
-        }),
-        // Tap the X to remove the current video
-        onRemove: () {
-          setState(() {
-            _newCoverVideo = null;
-            _coverVideoThumbnailPath = null;
-            _videoPreviewController?.dispose();
-            _videoPreviewController = null;
-          });
-        },
-      );
-    }
-
-    if (hasExisting) {
-      return _videoPreviewTile(
-        onTapBody: () => _pickVideo((f) {
-          setState(() {
-            _newCoverVideo = f;
-            _coverVideoThumbnailPath = null;
-          });
-          _initVideoPreviewFromFile(f);
-          _generateThumbnailFromFile(f);
-        }),
-        onRemove: () {
-          setState(() {
-            _existingCoverVideoUrl = null;
-            _coverVideoThumbnailPath = null;
-            _videoPreviewController?.dispose();
-            _videoPreviewController = null;
-          });
-        },
-      );
-    }
-
-    return _uploadButton(
-      icon: Icons.videocam,
-      label: 'Upload Cover Video',
-      onTap: () => _pickVideo((f) {
-        setState(() => _newCoverVideo = f);
-        _initVideoPreviewFromFile(f);
-        _generateThumbnailFromFile(f);
       }),
     );
   }
@@ -849,20 +772,10 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           if (index == _galleryImages.length) {
-            return GestureDetector(
+            return _addMediaButton(
+              icon: Icons.add,
+              label: 'Add Image',
               onTap: _pickMultiImages,
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border:
-                      Border.all(color: const Color(0xFFFFD966), width: 2),
-                ),
-                child: const Icon(Icons.add,
-                    size: 32, color: Color(0xFFFFB347)),
-              ),
             );
           }
           final item = _galleryImages[index];
@@ -889,24 +802,30 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
                   ),
                 ),
               ),
-              if (item.file != null)
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: GestureDetector(
-                    onTap: () =>
-                        setState(() => _galleryImages.removeAt(index)),
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: const BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.close,
-                          size: 16, color: Colors.white),
+              // Remove button — shows for both new local files and existing server items.
+              Positioned(
+                top: 4,
+                right: 4,
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      final removed = _galleryImages.removeAt(index);
+                      if (removed.id != null) {
+                        _removedImageIds.add(removed.id!);
+                      }
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: const BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
                     ),
+                    child: const Icon(Icons.close,
+                        size: 16, color: Colors.white),
                   ),
                 ),
+              ),
             ],
           );
         },
@@ -924,25 +843,16 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
         itemBuilder: (context, index) {
           if (index == _galleryVideos.length) {
             if (_galleryVideos.length >= 3) return const SizedBox.shrink();
-            return GestureDetector(
+            // "+" button — same style as the image gallery.
+            return _addMediaButton(
+              icon: Icons.add,
+              label: 'Add Video',
               onTap: () => _pickVideo((f) async {
                 setState(() {
                   _galleryVideos.add(_GalleryItem(file: f));
                 });
                 await _generateGalleryThumbnail(_galleryVideos.length - 1, f);
               }),
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border:
-                      Border.all(color: const Color(0xFFFFD966), width: 2),
-                ),
-                child: const Icon(Icons.videocam,
-                    size: 32, color: Color(0xFFFFB347)),
-              ),
             );
           }
           final item = _galleryVideos[index];
@@ -980,12 +890,19 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
                         ),
                 ),
               ),
+              // Remove button — shows for both new local files and existing server items.
               Positioned(
                 top: 4,
                 right: 4,
                 child: GestureDetector(
-                  onTap: () =>
-                      setState(() => _galleryVideos.removeAt(index)),
+                  onTap: () {
+                    setState(() {
+                      final removed = _galleryVideos.removeAt(index);
+                      if (removed.id != null) {
+                        _removedVideoIds.add(removed.id!);
+                      }
+                    });
+                  },
                   child: Container(
                     padding: const EdgeInsets.all(2),
                     decoration: const BoxDecoration(
@@ -1069,6 +986,7 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
     required String url,
     required String label,
     required VoidCallback onReplace,
+    VoidCallback? onRemove,
   }) {
     return Stack(
       children: [
@@ -1103,7 +1021,8 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
           top: 8,
           right: 8,
           child: GestureDetector(
-            onTap: onReplace,
+            // Prefer "remove" when provided, otherwise fall back to "replace".
+            onTap: onRemove ?? onReplace,
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: const BoxDecoration(
@@ -1126,189 +1045,6 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
             ),
             child: Text(
               label,
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _videoPreviewTile({
-    required VoidCallback onTapBody,
-    required VoidCallback onRemove,
-  }) {
-    return Stack(
-      children: [
-        // Card body — tap to play preview (long-press or tap opens picker)
-        GestureDetector(
-          onTap: _showVideoPreviewDialog,
-          onLongPress: onTapBody,
-          child: Container(
-            width: double.infinity,
-            height: 180,
-            decoration: BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFFFD966), width: 2),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Stack(
-                alignment: Alignment.center,
-                fit: StackFit.expand,
-                children: [
-                  if (_coverVideoThumbnailPath != null)
-                    Image.file(
-                      File(_coverVideoThumbnailPath!),
-                      fit: BoxFit.cover,
-                    )
-                  else
-                    const ColoredBox(color: Color(0xFF1A1A1A)),
-                  Container(color: Colors.black.withValues(alpha: 0.25)),
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          blurRadius: 8,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(Icons.play_arrow,
-                        color: Color(0xFF6B4C2A), size: 28),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // X button — remove video
-        Positioned(
-          top: 8,
-          right: 8,
-          child: GestureDetector(
-            onTap: onRemove,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(
-                color: Colors.black54,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.close, size: 18, color: Colors.white),
-            ),
-          ),
-        ),
-        // Bottom label
-        Positioned(
-          bottom: 8,
-          left: 8,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.black54,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              'Cover Video',
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _networkVideoPreviewTile({
-    required String url,
-    required VoidCallback onReplace,
-  }) {
-    return Stack(
-      children: [
-        GestureDetector(
-          onTap: _showVideoPreviewDialog,
-          child: Container(
-            width: double.infinity,
-            height: 180,
-            decoration: BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFFFD966), width: 2),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Stack(
-                alignment: Alignment.center,
-                fit: StackFit.expand,
-                children: [
-                  if (_coverVideoThumbnailPath != null)
-                    Image.file(
-                      File(_coverVideoThumbnailPath!),
-                      fit: BoxFit.cover,
-                    )
-                  else
-                    const ColoredBox(color: Color(0xFF1A1A1A)),
-                  Container(color: Colors.black.withValues(alpha: 0.25)),
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          blurRadius: 8,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(Icons.play_arrow,
-                        color: Color(0xFF6B4C2A), size: 28),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          top: 8,
-          right: 8,
-          child: GestureDetector(
-            onTap: onReplace,
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: const BoxDecoration(
-                color: Colors.black54,
-                shape: BoxShape.circle,
-              ),
-              child:
-                  const Icon(Icons.close, size: 16, color: Colors.white),
-            ),
-          ),
-        ),
-        Positioned(
-          bottom: 8,
-          left: 8,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.black54,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              'Cover Video',
               style: GoogleFonts.poppins(
                 fontSize: 11,
                 color: Colors.white,
@@ -1345,6 +1081,40 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
               label,
               style: GoogleFonts.poppins(
                 fontSize: 13,
+                color: const Color(0xFFC9A96E),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Small square "+" tile used at the end of gallery rows.
+  Widget _addMediaButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 100,
+        height: 100,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFFFD966), width: 2),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 32, color: const Color(0xFFFFB347)),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
                 color: const Color(0xFFC9A96E),
               ),
             ),
@@ -1525,9 +1295,15 @@ class _AddEditClassScreenState extends State<AddEditClassScreen> {
 }
 
 class _GalleryItem {
+  final String? id; // backend id for existing items, null for new local files
   final File? file;
   final String? url;
   final String? thumbnailPath;
 
-  _GalleryItem({this.file, this.url, this.thumbnailPath});
+  _GalleryItem({
+    this.id,
+    this.file,
+    this.url,
+    this.thumbnailPath,
+  });
 }

@@ -190,6 +190,20 @@ class ClassVideo {
   }
 }
 
+class ClassImage {
+  final String id;
+  final String image;
+
+  ClassImage({required this.id, required this.image});
+
+  factory ClassImage.fromJson(Map<String, dynamic> json) {
+    return ClassImage(
+      id: json['id'].toString(),
+      image: json['image'] ?? '',
+    );
+  }
+}
+
 class CookingClassModel {
   final String id;
   final String title;
@@ -198,13 +212,14 @@ class CookingClassModel {
   final String coverVideo;
   final String location;
   final double price;
+  final String currency;
   final double rating;
   final String classType;
   final String schedule;
   final List<String> tags;
   final List<String> dishes;
   final List<String> certificates;
-  final List<String> images;
+  final List<ClassImage> images;
   final List<ClassVideo> videos;
   final InstructorProfile instructor;
   final List<ClassAvailability> availabilities;
@@ -221,6 +236,7 @@ class CookingClassModel {
     required this.coverVideo,
     required this.location,
     required this.price,
+    this.currency = 'RM',
     required this.rating,
     required this.classType,
     required this.schedule,
@@ -246,6 +262,7 @@ class CookingClassModel {
       coverVideo: json['cover_video'] ?? '',
       location: json['location'] ?? '',
       price: double.tryParse(json['price'].toString()) ?? 0,
+      currency: json['currency'] ?? 'RM',
       rating: (json['rating'] ?? 0).toDouble(),
       classType: json['class_type'] ?? 'in_person',
       schedule: json['schedule'] ?? '',
@@ -253,7 +270,7 @@ class CookingClassModel {
       dishes: List<String>.from(json['dishes'] ?? []),
       certificates: List<String>.from(json['certificates'] ?? []),
       images: (json['images'] as List?)
-              ?.map((e) => e['image'] as String)
+              ?.map((e) => ClassImage.fromJson(e))
               .toList() ??
           [],
       videos: (json['videos'] as List?)
@@ -274,9 +291,9 @@ class CookingClassModel {
 
   String get priceDisplay {
     if (price == price.roundToDouble()) {
-      return 'RM ${price.toInt()}';
+      return '$currency ${price.toInt()}';
     }
-    return 'RM ${price.toStringAsFixed(2)}';
+    return '$currency ${price.toStringAsFixed(2)}';
   }
 }
 

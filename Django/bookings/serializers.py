@@ -159,7 +159,7 @@ class CookingClassSerializer(serializers.ModelSerializer):
         model = CookingClass
         fields = (
             'id', 'title', 'description', 'image', 'cover_video', 'images', 'videos',
-            'location', 'price', 'rating', 'class_type', 'schedule',
+            'location', 'price', 'currency', 'rating', 'class_type', 'schedule',
             'tags', 'dishes', 'certificates', 'is_active',
             'instructor', 'availabilities',
             'is_saved', 'is_available', 'is_fully_booked',

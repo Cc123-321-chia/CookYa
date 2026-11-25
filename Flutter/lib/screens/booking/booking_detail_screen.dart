@@ -38,8 +38,18 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   List<String> get _allImages {
     final images = <String>[];
     if (widget.classItem.image.isNotEmpty) images.add(widget.classItem.image);
-    images.addAll(widget.classItem.images);
+    for (final img in widget.classItem.images) {
+      if (img.image.isNotEmpty) images.add(img.image);
+    }
     return images;
+  }
+
+  // Flat list of gallery image URLs (ClassImage -> String).
+  List<String> get _galleryImageUrls {
+    return widget.classItem.images
+        .map((e) => e.image)
+        .where((e) => e.isNotEmpty)
+        .toList();
   }
 
   bool get _isInstructor => ApiService.currentUserIsCulinaryInstructor;
@@ -237,6 +247,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   Widget build(BuildContext context) {
     final images = _allImages;
     final videos = widget.classItem.videos;
+    final galleryImages = _galleryImageUrls;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF9E6),
@@ -553,17 +564,22 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.location_on,
-                                  size: 18, color: Color(0xFFFFB347)),
+                              const Padding(
+                                padding: EdgeInsets.only(top: 2),
+                                child: Icon(Icons.location_on,
+                                    size: 18, color: Color(0xFFFFB347)),
+                              ),
                               const SizedBox(width: 8),
-                              Text(
-                                widget.classItem.location,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: const Color(0xFF6B4C2A),
+                              Expanded(
+                                child: Text(
+                                  widget.classItem.location,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: const Color(0xFF6B4C2A),
+                                  ),
                                 ),
                               ),
                             ],
@@ -821,20 +837,20 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                           const SizedBox(height: 24),
                         ],
 
-                        if (widget.classItem.images.isNotEmpty) ...[
+                        if (galleryImages.isNotEmpty) ...[
                           _sectionTitle('Shop Gallery'),
                           const SizedBox(height: 12),
                           _withScrollHint(
                             height: 140,
-                            hasMore: widget.classItem.images.length > 1,
+                            hasMore: galleryImages.length > 1,
                             listView: ListView.builder(
                               scrollDirection: Axis.horizontal,
                               padding: const EdgeInsets.only(right: 16),
-                              itemCount: widget.classItem.images.length,
+                              itemCount: galleryImages.length,
                               itemBuilder: (context, index) {
                                 return GestureDetector(
                                   onTap: () => _openPhotoViewer(
-                                    urls: widget.classItem.images,
+                                    urls: galleryImages,
                                     startIndex: index,
                                     title: widget.classItem.title,
                                   ),
@@ -855,7 +871,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                                       borderRadius: BorderRadius.circular(14),
                                       child: CachedNetworkImage(
                                         imageUrl: ApiService.resolveImageUrl(
-                                            widget.classItem.images[index]),
+                                            galleryImages[index]),
                                         fit: BoxFit.cover,
                                         placeholder: (context, url) =>
                                             Container(

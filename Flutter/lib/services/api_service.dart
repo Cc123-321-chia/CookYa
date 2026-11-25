@@ -150,8 +150,6 @@ class ApiService {
   }) async {
     try {
       final uri = Uri.parse('$baseUrl/recipes/homeworks/$homeworkId/');
-      print('=== UPDATE HOMEWORK URL: $uri ===');
-      print('=== THIS FILE: lib/services/api_service.dart ===');
       final request = http.MultipartRequest('PATCH', uri);
       request.headers['Authorization'] = 'Token $authToken';
       if (review != null) request.fields['review'] = review;
@@ -1765,6 +1763,7 @@ class ApiService {
     required String description,
     required String location,
     required double price,
+    String currency = 'RM',
     String classType = 'in_person',
     String schedule = '',
     List<String> tags = const [],
@@ -1785,6 +1784,7 @@ class ApiService {
       request.fields['description'] = description;
       request.fields['location'] = location;
       request.fields['price'] = price.toString();
+      request.fields['currency'] = currency;
       request.fields['class_type'] = classType;
       request.fields['schedule'] = schedule;
       request.fields['tags'] = jsonEncode(tags);
@@ -1818,6 +1818,7 @@ class ApiService {
     required String description,
     required String location,
     required double price,
+    String currency = 'RM',
     String classType = 'in_person',
     String schedule = '',
     List<String>? tags,
@@ -1827,6 +1828,10 @@ class ApiService {
     File? coverVideo,
     List<File> newImages = const [],
     List<File> newVideos = const [],
+    bool removeCoverImage = false,
+    bool removeCoverVideo = false,
+    List<String> removedImageIds = const [],
+    List<String> removedVideoIds = const [],
   }) async {
     try {
       final request = http.MultipartRequest(
@@ -1838,12 +1843,22 @@ class ApiService {
       request.fields['description'] = description;
       request.fields['location'] = location;
       request.fields['price'] = price.toString();
+      request.fields['currency'] = currency;
       request.fields['class_type'] = classType;
       request.fields['schedule'] = schedule;
       if (tags != null) request.fields['tags'] = jsonEncode(tags);
       if (dishes != null) request.fields['dishes'] = jsonEncode(dishes);
       if (certificates != null) {
         request.fields['certificates'] = jsonEncode(certificates);
+      }
+      // Deletion signals (backend removes these before/after saving new files)
+      if (removeCoverImage) request.fields['remove_cover_image'] = 'true';
+      if (removeCoverVideo) request.fields['remove_cover_video'] = 'true';
+      if (removedImageIds.isNotEmpty) {
+        request.fields['remove_image_ids'] = jsonEncode(removedImageIds);
+      }
+      if (removedVideoIds.isNotEmpty) {
+        request.fields['remove_video_ids'] = jsonEncode(removedVideoIds);
       }
       if (image != null) {
         request.files.add(await http.MultipartFile.fromPath('image', image.path));

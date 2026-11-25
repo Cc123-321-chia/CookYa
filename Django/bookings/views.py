@@ -695,12 +695,20 @@ def create_class(request):
     profile = request.user.instructor_profile
     data = request.data
 
+    print('=== UPDATE CLASS DEBUG ===')
+    print('remove_cover_video =', repr(request.data.get('remove_cover_video')))
+    print('remove_cover_image =', repr(request.data.get('remove_cover_image')))
+    print('remove_image_ids =', repr(request.data.get('remove_image_ids')))
+    print('remove_video_ids =', repr(request.data.get('remove_video_ids')))
+    print('cover_video in FILES =', 'cover_video' in request.FILES)
+
     cls = CookingClass.objects.create(
         instructor=profile,
         title=data.get('title', ''),
         description=data.get('description', ''),
         location=data.get('location', ''),
         price=data.get('price', 0),
+        currency=data.get('currency', 'RM'),
         class_type=data.get('class_type', 'in_person'),
         schedule=data.get('schedule', ''),
         is_active=True,
@@ -758,12 +766,18 @@ def update_class(request, class_id):
     cls.description = data.get('description', cls.description)
     cls.location = data.get('location', cls.location)
     cls.price = data.get('price', cls.price)
+    cls.currency = data.get('currency', cls.currency)
     cls.class_type = data.get('class_type', cls.class_type)
     cls.schedule = data.get('schedule', cls.schedule)
 
+    # Delete old files from storage before replacing them, to avoid orphans.
     if 'image' in request.FILES:
+        if cls.image and cls.image.name.startswith('classes/'):
+            cls.image.delete(save=False)
         cls.image = request.FILES['image']
     if 'cover_video' in request.FILES:
+        if cls.cover_video:
+            cls.cover_video.delete(save=False)
         cls.cover_video = request.FILES['cover_video']
 
     cls.save()
@@ -795,6 +809,40 @@ def update_class(request, class_id):
 
     for f in request.FILES.getlist('new_videos'):
         CookingClassVideo.objects.create(cooking_class=cls, video=f)
+
+    # Remove cover image / video if requested.
+    if request.data.get('remove_cover_image') == 'true':
+        if cls.image and cls.image.name.startswith('classes/'):
+            cls.image.delete(save=False)
+        cls.image = None
+        cls.save()
+    if request.data.get('remove_cover_video') == 'true':
+        if cls.cover_video:
+            cls.cover_video.delete(save=False)
+        cls.cover_video = None
+        cls.save()
+
+    # Remove gallery items by id (scoped to this class, prevents IDOR).
+    def _parse_ids(key):
+        raw = request.data.get(key)
+        if not raw:
+            return []
+        try:
+            return [int(x) for x in json.loads(raw)]
+        except Exception:
+            return []
+
+    img_ids = _parse_ids('remove_image_ids')
+    if img_ids:
+        for img in CookingClassImage.objects.filter(id__in=img_ids, cooking_class=cls):
+            img.image.delete(save=False)
+            img.delete()
+
+    vid_ids = _parse_ids('remove_video_ids')
+    if vid_ids:
+        for v in CookingClassVideo.objects.filter(id__in=vid_ids, cooking_class=cls):
+            v.video.delete(save=False)
+            v.delete()
 
     serializer = CookingClassSerializer(cls, context={'request': request})
     return Response({'success': True, 'data': serializer.data})
@@ -831,6 +879,17 @@ def delete_class(request, class_id):
         if b.payment_status == 'paid':
             b.payment_status = 'refunded'
         b.save()
+
+    # Clean up media files before deleting the class (avoid orphans).
+    # Only delete files under 'classes/' — never touch instructor avatar/cover.
+    if cls.image and cls.image.name.startswith('classes/'):
+        cls.image.delete(save=False)
+    if cls.cover_video:
+        cls.cover_video.delete(save=False)
+    for img in cls.images.all():
+        img.image.delete(save=False)
+    for v in cls.videos.all():
+        v.video.delete(save=False)
 
     cls.delete()
     return Response({'success': True, 'message': 'Class deleted'})
