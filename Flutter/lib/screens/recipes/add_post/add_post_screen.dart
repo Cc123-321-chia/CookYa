@@ -43,7 +43,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
   List<dynamic> _photos = [];
   dynamic _video;              // File? / String? / null
   dynamic _videoCustomCover;   // File? / String? / null
-  String? _videoThumbnailPath;
+  String? _videoThumbnailPath; 
   VideoPlayerController? _videoController;
 
   bool _isLoadingRecipe = false;
@@ -62,6 +62,8 @@ class _AddPostScreenState extends State<AddPostScreen> {
   final TextEditingController _stepNoteController = TextEditingController();
   bool _showNoteField = false;
   int? _editingStepIndex;
+  bool _isAddingOtherCuisine = false;
+  final TextEditingController _otherCuisineController = TextEditingController();
 
   final ImagePicker _picker = ImagePicker();
 
@@ -85,6 +87,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
     _ingredientAmountController.dispose();
     _stepInstructionController.dispose();
     _stepNoteController.dispose();
+    _otherCuisineController.dispose();
     super.dispose();
   }
 
@@ -616,13 +619,15 @@ class _AddPostScreenState extends State<AddPostScreen> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF9E6),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          _isEditMode ? 'Edit Recipe' : 'Add New Recipe',
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFF9E6),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          title: Text(
+            _isEditMode ? 'Edit Recipe' : 'Add New Recipe',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
             fontSize: 18,
@@ -663,6 +668,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -1084,171 +1090,183 @@ class _AddPostScreenState extends State<AddPostScreen> {
       'Mexican', 'Vietnamese', 'Greek', 'Spanish'
     ];
 
-    return StatefulBuilder(
-      builder: (context, setStateInner) {
-        bool isAddingOtherCuisine = false;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Cuisine Type',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+            color: const Color(0xFF6B4C2A),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
           children: [
-            Text(
-              'Cuisine Type',
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-                color: const Color(0xFF6B4C2A),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                ...cuisineOptions.map((cuisine) {
-                  final isSelected = _cuisineType == cuisine;
-                  return GestureDetector(
-                    onTap: () {
-                      setStateInner(() {
-                        _cuisineType = isSelected ? '' : cuisine;
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected ? const Color(0xFFFFD966) : Colors.white,
-                        border: Border.all(
-                          color: isSelected ? const Color(0xFFFFD966) : Colors.grey.shade300,
-                          width: 1.5,
-                        ),
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (isSelected) ...[
-                            const Icon(Icons.check, size: 16, color: Color(0xFF6B4C2A)),
-                            const SizedBox(width: 6),
-                          ],
-                          Text(
-                            cuisine,
-                            style: TextStyle(
-                              color: const Color(0xFF6B4C2A),
-                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-                if (!isAddingOtherCuisine)
-                  GestureDetector(
-                    onTap: () {
-                      setStateInner(() {
-                        isAddingOtherCuisine = true;
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(color: const Color(0xFFFFB347), width: 1.5),
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(Icons.add, size: 18, color: Color(0xFFFFB347)),
-                          SizedBox(width: 4),
-                          Text('Other', style: TextStyle(color: Color(0xFFFFB347))),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            if (isAddingOtherCuisine)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _cuisineController,
-                        decoration: InputDecoration(
-                          hintText: 'Enter custom cuisine...',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(30),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(30),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(30),
-                            borderSide: const BorderSide(color: Color(0xFFFFD966), width: 2),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                        autofocus: true,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: () {
-                        if (_cuisineController.text.isNotEmpty) {
-                          setStateInner(() {
-                            _cuisineType = _cuisineController.text;
-                            _cuisineController.clear();
-                            isAddingOtherCuisine = false;
-                          });
-                        }
-                      },
-                      icon: const Icon(Icons.check_circle, color: Color(0xFFFFB347)),
-                    ),
-                    IconButton(
-                      onPressed: () {
-                        setStateInner(() {
-                          isAddingOtherCuisine = false;
-                          _cuisineController.clear();
-                        });
-                      },
-                      icon: const Icon(Icons.cancel, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-            if (_cuisineType.isNotEmpty && !cuisineOptions.contains(_cuisineType))
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
+            ...cuisineOptions.map((cuisine) {
+              final isSelected = _cuisineType == cuisine;
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _cuisineType = isSelected ? '' : cuisine;
+                  });
+                },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFD966),
-                    border: Border.all(color: const Color(0xFFFFB347), width: 1.5),
+                    color:
+                        isSelected ? const Color(0xFFFFD966) : Colors.white,
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFFFFD966)
+                          : Colors.grey.shade300,
+                      width: 1.5,
+                    ),
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_cuisineType, style: const TextStyle(color: Color(0xFF6B4C2A))),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () {
-                          setStateInner(() {
-                            _cuisineType = '';
-                          });
-                        },
-                        child: const Icon(Icons.close, size: 16, color: Color(0xFFFFB347)),
+                      if (isSelected) ...[
+                        const Icon(Icons.check,
+                            size: 16, color: Color(0xFF6B4C2A)),
+                        const SizedBox(width: 6),
+                      ],
+                      Text(
+                        cuisine,
+                        style: TextStyle(
+                          color: const Color(0xFF6B4C2A),
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.normal,
+                        ),
                       ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            if (!_isAddingOtherCuisine)
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isAddingOtherCuisine = true;
+                  });
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(
+                        color: const Color(0xFFFFB347), width: 1.5),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.add, size: 18, color: Color(0xFFFFB347)),
+                      SizedBox(width: 4),
+                      Text('Other',
+                          style: TextStyle(color: Color(0xFFFFB347))),
                     ],
                   ),
                 ),
               ),
           ],
-        );
-      },
+        ),
+        if (_isAddingOtherCuisine)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _otherCuisineController,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: 'Enter custom cuisine...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: const BorderSide(
+                            color: Color(0xFFFFD966), width: 2),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () {
+                    final v = _otherCuisineController.text.trim();
+                    if (v.isNotEmpty) {
+                      setState(() {
+                        _cuisineType = v;
+                        _otherCuisineController.clear();
+                        _isAddingOtherCuisine = false;
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.check_circle,
+                      color: Color(0xFFFFB347)),
+                ),
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _isAddingOtherCuisine = false;
+                      _otherCuisineController.clear();
+                    });
+                  },
+                  icon: const Icon(Icons.cancel, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        if (_cuisineType.isNotEmpty &&
+            !cuisineOptions.contains(_cuisineType))
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFD966),
+                border:
+                    Border.all(color: const Color(0xFFFFB347), width: 1.5),
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_cuisineType,
+                      style: const TextStyle(color: Color(0xFF6B4C2A))),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _cuisineType = '';
+                      });
+                    },
+                    child: const Icon(Icons.close,
+                        size: 16, color: Color(0xFFFFB347)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 
