@@ -523,6 +523,7 @@ class RefundRequestSerializer(serializers.ModelSerializer):
             'start_time': b.start_time.strftime('%H:%M') if b.start_time else None,
             'end_time': b.end_time.strftime('%H:%M') if b.end_time else None,
             'quantity': b.quantity,
+            'currency': cls.currency,              
             'price_per_pax': float(cls.price),
             'total_price': float(cls.price) * b.quantity,
         }
