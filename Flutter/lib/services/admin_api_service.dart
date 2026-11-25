@@ -7,12 +7,15 @@ import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/carousel_item.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'api_service.dart'; 
 
 class AdminApiService {
   static String get baseUrl {
     if (kIsWeb) return 'http://localhost:8000/api';
-    if (Platform.isAndroid) return 'http://10.0.2.2:8000/api';
-    return 'http://localhost:8000/api';
+    // Android real device / iOS real device: use the LAN IP of the
+    // development machine. 10.0.2.2 only works on the Android emulator,
+    // localhost only works when the backend runs on the same machine.
+    return 'http://192.168.100.166:8000/api';
   }
 
   static String? _adminToken;

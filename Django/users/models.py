@@ -428,8 +428,11 @@ class SystemNotification(models.Model):
         ('refund_request', 'Refund Request'),
         ('refund_update', 'Refund Update'),
         ('refund_resolved', 'Refund Resolved'),
-        ('mentorship_accepted', 'Mentorship Accepted'),  # ← Added
-        ('mentorship_declined', 'Mentorship Declined'),  # ← Added
+        ('mentorship_accepted', 'Mentorship Accepted'), 
+        ('mentorship_declined', 'Mentorship Declined'),
+        ('instructor_application_submitted', 'Instructor Application Submitted'),
+        ('instructor_application_approved', 'Instructor Application Approved'),
+        ('instructor_application_rejected', 'Instructor Application Rejected'),  
     )
     REJECT_REASONS = (
         ('violation', 'Violation (Violence / Sexual / Prohibited)'),
@@ -443,7 +446,7 @@ class SystemNotification(models.Model):
     content = models.TextField()
     notification_type = models.CharField(max_length=50, choices=NOTIFICATION_TYPES, default='general')
     reject_reason = models.CharField(max_length=30, choices=REJECT_REASONS, blank=True, null=True)
-    post_type = models.CharField(max_length=20, blank=True, null=True)
+    post_type = models.CharField(max_length=50, blank=True, null=True)
     post_id = models.CharField(max_length=50, blank=True, null=True)
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

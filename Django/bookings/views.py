@@ -1154,6 +1154,23 @@ def apply_instructor(request):
     for photo in photos:
         InstructorShopPhoto.objects.create(instructor=profile, image=photo)
 
+    photos = request.FILES.getlist('shop_photos')
+    for photo in photos:
+        InstructorShopPhoto.objects.create(instructor=profile, image=photo)
+
+    _notify(
+        request.user,
+        title='Application Submitted',
+        content=(
+            f'Your application for "{profile.shop_name}" has been submitted '
+            f'and is pending review. If you need to make changes, you can '
+            f'submit again from the Apply as Provider page.'
+        ),
+        notification_type='instructor_application_submitted',
+        post_type='instructor_app',
+        post_id=str(profile.id),
+    )
+
     return Response({'success': True, 'message': 'Application submitted'})
 
 
@@ -1520,6 +1537,18 @@ def admin_approve_instructor(request, application_id):
                 image=photo.image,
             )
 
+        _notify(
+        profile.user,
+        title='Application Approved',
+        content=(
+            f'Congratulations! Your shop "{profile.shop_name}" has been approved. '
+            f'You can now start creating classes and accepting bookings.'
+        ),
+        notification_type='instructor_application_approved',
+        post_type='instructor_app',
+        post_id=str(profile.id),
+    )
+
     serializer = InstructorApplicationAdminSerializer(
         profile, context={'request': request}
     )
@@ -1544,20 +1573,17 @@ def admin_reject_instructor(request, application_id):
     profile.rejected_at = timezone.now()
     profile.save()
 
-    try:
-        _notify(
-            profile.user,
-            title='Instructor Application Approved',
-            content=(
-                f'Congratulations! Your shop "{profile.shop_name}" has been '
-                f'approved. You can now start creating classes and accepting bookings.'
-            ),
-            notification_type='instructor_approved',
-            post_type='instructor_application',
-            post_id=str(profile.id),
-        )
-    except Exception as e:
-        print(f'_notify failed: {e}')
+    _notify(
+        profile.user,
+        title='Application Rejected',
+        content=(
+            f'Your application for "{profile.shop_name}" was rejected. '
+            f'Reason: {reason}. You can update your information and submit again.'
+        ),
+        notification_type='instructor_application_rejected',
+        post_type='instructor_app', 
+        post_id=str(profile.id),
+    )
 
     return Response({'success': True, 'message': 'Rejected'})
 
